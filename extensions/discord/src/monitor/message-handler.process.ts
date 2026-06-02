@@ -1281,27 +1281,31 @@ async function processDiscordMessageInner(
     await draftPreview.cleanup();
     const finalDeliveryFailed = (dispatchResult?.failedCounts?.final ?? 0) > 0;
     if (statusReactionsActive) {
+      const failed = dispatchError || finalDeliveryFailed;
       if (dispatchAborted) {
+        // Aborts produce no user-visible reply; surface ❌ so the operator
+        // sees a terminal failure indicator instead of a silently-cleared
+        // reaction state.
         if (removeAckAfterReply) {
-          void statusReactions.clear();
+          await statusReactions.setError();
         } else {
           void statusReactions.restoreInitial();
         }
       } else {
-        if (dispatchError || finalDeliveryFailed) {
+        if (failed) {
           await statusReactions.setError();
         } else {
           await statusReactions.setDone();
         }
         if (removeAckAfterReply) {
-          void (async () => {
-            await sleep(
-              dispatchError || finalDeliveryFailed
-                ? statusReactionTiming.errorHoldMs
-                : statusReactionTiming.doneHoldMs,
-            );
-            await statusReactions.clear();
-          })();
+          // ❌ is sticky so the operator never sits waiting on a silent
+          // failure. ✅ clears after doneHoldMs to avoid checkmark clutter.
+          if (!failed) {
+            void (async () => {
+              await sleep(statusReactionTiming.doneHoldMs);
+              await statusReactions.clear();
+            })();
+          }
         } else {
           void statusReactions.restoreInitial();
         }

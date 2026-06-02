@@ -1151,7 +1151,7 @@ describe("processDiscordMessage ack reactions", () => {
     expect(emojis).toContain(DEFAULT_EMOJIS.thinking);
   });
 
-  it("clears status reactions when dispatch aborts and removeAckAfterReply is enabled", async () => {
+  it("surfaces an error reaction when dispatch aborts and removeAckAfterReply is enabled", async () => {
     const abortController = new AbortController();
     dispatchInboundMessage.mockImplementationOnce(async () => {
       abortController.abort();
@@ -1172,6 +1172,7 @@ describe("processDiscordMessage ack reactions", () => {
     await runProcessDiscordMessage(ctx);
 
     await vi.waitFor(() => expect(sendMocks.removeReactionDiscord).toHaveBeenCalled());
+    expect(getReactionEmojis()).toContain(DEFAULT_EMOJIS.error);
     expectRemoveAckCallAt(0, "👀", {
       accountId: "default",
       ackReaction: "👀",

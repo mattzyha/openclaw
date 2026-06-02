@@ -1300,11 +1300,12 @@ async function processDiscordMessageInner(
         if (removeAckAfterReply) {
           // ❌ is sticky so the operator never sits waiting on a silent
           // failure. ✅ clears after doneHoldMs to avoid checkmark clutter.
+          // Awaited (not fire-and-forget) so the gateway's restart drain
+          // waits for cleanup to complete before exiting — otherwise a
+          // restart inside doneHoldMs strands ✅/👀 on the user's message.
           if (!failed) {
-            void (async () => {
-              await sleep(statusReactionTiming.doneHoldMs);
-              await statusReactions.clear();
-            })();
+            await sleep(statusReactionTiming.doneHoldMs);
+            await statusReactions.clear();
           }
         } else {
           void statusReactions.restoreInitial();

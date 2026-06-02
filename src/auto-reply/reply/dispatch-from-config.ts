@@ -2383,6 +2383,12 @@ export async function dispatchReplyFromConfig(
       payload.status === "failed" ||
       payload.status === "error" ||
       (typeof payload.exitCode === "number" && payload.exitCode !== 0);
+    const suppressChannelToolErrorDetails =
+      !isInternalWebchatTurn &&
+      (chatType === "group" || chatType === "channel") &&
+      !shouldEmitFullVerboseProgress();
+    const suppressToolErrorDetails =
+      params.replyOptions?.suppressToolErrorDetails ?? suppressChannelToolErrorDetails;
     const shouldSuppressToolErrorWarnings = () => {
       if (params.replyOptions?.suppressToolErrorWarnings !== undefined) {
         return params.replyOptions.suppressToolErrorWarnings;
@@ -2483,6 +2489,7 @@ export async function dispatchReplyFromConfig(
             sourceReplyDeliveryMode,
             suppressToolErrorWarnings,
             shouldSuppressToolErrorWarnings,
+            suppressToolErrorDetails,
             typingPolicy: typing.typingPolicy,
             suppressTyping: typing.suppressTyping,
             onPartialReply: wrapProgressCallback(params.replyOptions?.onPartialReply),

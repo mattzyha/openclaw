@@ -2188,8 +2188,10 @@ describe("createFollowupRunner progress forwarding", () => {
       async (args: {
         onAgentEvent?: (evt: { stream: string; data: Record<string, unknown> }) => Promise<void>;
         suppressToolErrorWarnings?: boolean | (() => boolean | undefined);
+        suppressToolErrorDetails?: boolean;
       }) => {
         const shouldSuppress = args.suppressToolErrorWarnings as () => boolean | undefined;
+        expect(args.suppressToolErrorDetails).toBe(false);
         expect(shouldSuppress()).toBeUndefined();
         await args.onAgentEvent?.({
           stream: "command_output",
@@ -2214,6 +2216,7 @@ describe("createFollowupRunner progress forwarding", () => {
 
     await runner(
       createQueuedRun({
+        originatingChatType: "group",
         run: {
           messageProvider: "discord",
           sourceReplyDeliveryMode: "message_tool_only",
@@ -2230,8 +2233,10 @@ describe("createFollowupRunner progress forwarding", () => {
       async (args: {
         onAgentEvent?: (evt: { stream: string; data: Record<string, unknown> }) => Promise<void>;
         suppressToolErrorWarnings?: boolean | (() => boolean | undefined);
+        suppressToolErrorDetails?: boolean;
       }) => {
         const shouldSuppress = args.suppressToolErrorWarnings as () => boolean | undefined;
+        expect(args.suppressToolErrorDetails).toBe(true);
         expect(shouldSuppress()).toBeUndefined();
         await args.onAgentEvent?.({
           stream: "command_output",
@@ -2255,6 +2260,7 @@ describe("createFollowupRunner progress forwarding", () => {
 
     await runner(
       createQueuedRun({
+        originatingChatType: "group",
         run: {
           messageProvider: "discord",
           sourceReplyDeliveryMode: "message_tool_only",

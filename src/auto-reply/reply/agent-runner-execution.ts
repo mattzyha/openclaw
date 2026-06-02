@@ -2318,6 +2318,7 @@ export async function runAgentTurnWithFallback(params: {
                     suppressToolErrorWarnings:
                       params.opts?.shouldSuppressToolErrorWarnings ??
                       params.opts?.suppressToolErrorWarnings,
+                    suppressToolErrorDetails: params.opts?.suppressToolErrorDetails,
                     disableTools: params.opts?.disableTools,
                     enableHeartbeatTool: params.opts?.enableHeartbeatTool,
                     forceHeartbeatTool: params.opts?.forceHeartbeatTool,

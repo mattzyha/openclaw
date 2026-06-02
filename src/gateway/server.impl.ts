@@ -1491,6 +1491,8 @@ export async function startGatewayServer(
         port,
         gatewayHost: bindHost ?? undefined,
         pluginSurfaceScheme,
+        // Capability URLs are minted from the active startup registry at attach time so
+        // node clients receive TLS-aware plugin surface hosts without importing HTTP routes early.
         getPluginNodeCapabilities: () => listPluginNodeCapabilities(pluginRegistry),
         resolvedAuth,
         getResolvedAuth,

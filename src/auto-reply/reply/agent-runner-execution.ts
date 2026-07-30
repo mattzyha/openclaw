@@ -25,6 +25,7 @@ import {
   classifyOAuthRefreshFailure,
   classifyOAuthRefreshFailureError,
   formatOAuthRefreshFailureLoginCommandMarkdown,
+  sanitizeOAuthRefreshFailureProvider,
 } from "../../agents/auth-profiles/oauth-refresh-failure.js";
 import { resolveBootstrapWarningSignaturesSeen } from "../../agents/bootstrap-budget.js";
 import type { BootstrapContextRunKind } from "../../agents/bootstrap-mode.js";
@@ -96,7 +97,10 @@ import {
 } from "../../utils/message-channel.js";
 import { isInternalMessageChannel } from "../../utils/message-channel.js";
 import { stripHeartbeatToken } from "../heartbeat.js";
-import { markReplyPayloadForSourceSuppressionDelivery } from "../reply-payload.js";
+import {
+  markReplyPayloadAsRunTerminalErrorSurface,
+  markReplyPayloadForSourceSuppressionDelivery,
+} from "../reply-payload.js";
 import type { TemplateContext } from "../templating.js";
 import type { VerboseLevel } from "../thinking.js";
 import {
@@ -782,6 +786,114 @@ function hasBillingAttemptSummary(err: unknown): boolean {
   );
 }
 
+type AuthAttemptFailureDetail = {
+  provider: string | null;
+  // Where the classification came from. "summary" (all-auth
+  // FallbackSummaryError) is a strong structural signal — every attempt
+  // in the chain was auth-classified — so message-level confirmation is
+  // not required. "failover" (single FailoverError with reason=auth) is
+  // still gated on looksLikeCredentialExpiryMessage because a bare 401/
+  // 403 may be an authorization/scope failure that re-auth won't fix.
+  origin: "failover" | "summary";
+};
+
+// Structural detection for classified auth failures that don't flow through
+// the OpenClaw OAuth-refresh path — e.g. Claude CLI's "Invalid API key ·
+// Please run `/login`" surfaces as a FailoverError with reason="auth" (see
+// src/agents/cli-runner/claude-live-session.ts createResultError), and when
+// the whole fallback chain shares the auth outage it lands as a
+// FallbackSummaryError whose attempts carry reason="auth". Without this
+// detection those errors fall into the generic bucket and get silenced by
+// the group silent-reply policy.
+// Narrow credential-expiry hints. Covers Claude CLI's "Please run
+// `/login`", Anthropic's {type:"authentication_error", message:"invalid
+// x-api-key"} shape, and OpenAI-style "Incorrect API key" /
+// "invalid_token" phrasings. Deliberately excludes broader auth signals
+// like "forbidden", "\b403\b", "insufficient permissions", "not allowed
+// for this organization", Anthropic's 403 `permission_error` type, and
+// bare "unauthorized" (OpenAI 403 scope failures include that word) —
+// those are authorization/scope issues, not credential expiry, and
+// re-authenticating won't fix them. Gates the last-resort auth branch
+// so those cases still surface the underlying error text via the
+// generic fallback (which respects includeDetails for verbose runs).
+const AUTH_CREDENTIAL_EXPIRY_HINT_RE =
+  /\b(?:invalid|incorrect|expired|stale|revoked)[_\s-]?x?[_\s-]?api[_\s-]?key\b|\bx?[_\s-]?api[_\s-]?key\s+(?:is\s+)?(?:invalid|expired|revoked|incorrect)\b|\bplease\s+run\s+`?\/?login\b|\boauth\s+token\s+(?:has\s+)?expired\b|\btoken\s+(?:has\s+)?expired\b|\b(?:invalid|revoked)[_\s-]?token\b|\btoken\s+(?:is\s+)?(?:invalid|revoked)\b|\bplease\s+re-?authenticate\b|\bauthentication[_\s-]?error\b/i;
+
+function looksLikeCredentialExpiryMessage(message: string): boolean {
+  return AUTH_CREDENTIAL_EXPIRY_HINT_RE.test(message);
+}
+
+// Matches model-fallback's auth-cooldown skip attempt text. When the
+// profile store records a prior auth failure (typically credential
+// expiry), subsequent runs synthesize this per-attempt error without
+// carrying the original message. Treated as a strong re-auth signal.
+const AUTH_COOLDOWN_SKIP_MESSAGE_RE = /\bhas\s+auth(?:_permanent)?\s+issue\s+\(skipping/i;
+
+function isAuthCooldownSkipMessage(text: string): boolean {
+  return AUTH_COOLDOWN_SKIP_MESSAGE_RE.test(text);
+}
+
+function detectAuthAttemptFailure(err: unknown): AuthAttemptFailureDetail | null {
+  if (isFailoverError(err)) {
+    if (err.reason !== "auth" && err.reason !== "auth_permanent") {
+      return null;
+    }
+    // The typed auth-profile failover copy is richer than the generic
+    // re-auth line; defer to it when the FailoverError already carries
+    // that structured detail so buildAuthProfileFailoverFailureText wins.
+    if (err.authProfileFailure) {
+      return null;
+    }
+    return {
+      provider: typeof err.provider === "string" ? err.provider : null,
+      origin: "failover",
+    };
+  }
+  if (isFallbackSummaryError(err)) {
+    if (err.attempts.length === 0) {
+      return null;
+    }
+    // Require every attempt to be an auth failure before emitting the
+    // definitive "login expired, please re-auth" copy — a mixed-cause
+    // exhaustion (e.g. primary rate-limited, secondary auth-failed) must
+    // fall through to the generic summary so the actual blocking failure
+    // stays visible. Mirrors isPureTransientRateLimitSummary.
+    const allAuth = err.attempts.every(
+      (attempt) => attempt.reason === "auth" || attempt.reason === "auth_permanent",
+    );
+    if (!allAuth) {
+      return null;
+    }
+    // Every 401/403 classifies as reason=auth upstream — including
+    // authorization/scope failures (e.g. "does not have access to
+    // model"). Confirm the summary reflects credential-expiry-shaped
+    // failures before emitting the re-auth copy. Two acceptable shapes:
+    //   - some attempt error text is credential-shaped
+    //   - some attempt is the auth-cooldown skip (profile store recorded
+    //     a prior auth failure — typically credential expiry)
+    const confirmed = err.attempts.some(
+      (attempt) =>
+        typeof attempt.error === "string" &&
+        (looksLikeCredentialExpiryMessage(attempt.error) ||
+          isAuthCooldownSkipMessage(attempt.error)),
+    );
+    if (!confirmed) {
+      return null;
+    }
+    const attemptWithProvider = err.attempts.find(
+      (attempt) => typeof attempt.provider === "string" && attempt.provider,
+    );
+    return {
+      provider:
+        attemptWithProvider && typeof attemptWithProvider.provider === "string"
+          ? attemptWithProvider.provider
+          : null,
+      origin: "summary",
+    };
+  }
+  return null;
+}
+
 function collapseRepeatedFailureDetail(message: string): string {
   const parts = message
     .split(/\s+\|\s+/u)
@@ -1017,10 +1129,7 @@ function buildExternalRunFailureReply(
   }
   const providerRequestError = classifyProviderRequestError(error ?? normalizedMessage);
   if (providerRequestError) {
-    return {
-      text: providerRequestError.userMessage,
-      isGenericRunnerFailure: false,
-    };
+    return { text: providerRequestError.userMessage, isGenericRunnerFailure: false };
   }
   const missingApiKeyFailure = buildMissingApiKeyFailureText({
     message: normalizedMessage,
@@ -1028,6 +1137,34 @@ function buildExternalRunFailureReply(
   });
   if (missingApiKeyFailure) {
     return { text: missingApiKeyFailure, isGenericRunnerFailure: false };
+  }
+  // Last-resort structural catch for classified auth failures that don't
+  // match any of the message-based classifiers above (e.g. Claude CLI's
+  // "Invalid API key · Please run `/login`" surfaces as a FailoverError
+  // with reason="auth" but no OpenClaw OAuth-refresh phrasing). Runs
+  // after buildMissingApiKeyFailureText and oauthRefreshFailure so the
+  // more specific repair copy (doctor-fix, transient try-again) still
+  // wins when those classifiers match — many "auth" reasons ride on the
+  // missing-key or OAuth-refresh patterns that get coerced through
+  // model-fallback.coerceToFailoverError. Placed above the isHeartbeat
+  // early-return so heartbeat-triggered auth expiry surfaces re-auth
+  // guidance too, matching the sibling oauthRefreshFailure branch.
+  // Gated on looksLikeCredentialExpiryMessage so plain 401/403
+  // authorization failures (e.g. "does not have access to model", "not
+  // allowed for this organization") still surface the underlying error
+  // text via the generic fallback — re-auth doesn't fix those.
+  const authAttemptFailure = detectAuthAttemptFailure(error);
+  if (
+    authAttemptFailure &&
+    (authAttemptFailure.origin === "summary" || looksLikeCredentialExpiryMessage(normalizedMessage))
+  ) {
+    const sanitizedProvider = sanitizeOAuthRefreshFailureProvider(authAttemptFailure.provider);
+    const loginCommand = buildOAuthRefreshFailureLoginCommand(sanitizedProvider);
+    const providerLabel = sanitizedProvider ? ` for ${sanitizedProvider}` : "";
+    return {
+      text: `⚠️ Model login expired on the gateway${providerLabel}. Re-auth with \`${loginCommand}\`, then try again.`,
+      isGenericRunnerFailure: false,
+    };
   }
   if (options?.isHeartbeat) {
     return { text: HEARTBEAT_EXTERNAL_RUN_FAILURE_TEXT, isGenericRunnerFailure: false };
@@ -1049,7 +1186,15 @@ function buildExternalRunFailureReply(
 }
 
 function markAgentRunFailureReplyPayload<T extends ReplyPayload>(payload: T): T {
-  const marked = markReplyPayloadForSourceSuppressionDelivery(payload);
+  // Every payload this wrapper produces represents a terminal run failure
+  // (billing, rate-limit, preflight compaction, missing API key, auth,
+  // context overflow, generic fallback, etc.). The terminal-error marker
+  // lives here rather than at every call site so channels rendering a
+  // terminal-status indicator (Discord ❌ vs ✅) reflect the actual run
+  // outcome even for failure surfaces added later.
+  const marked = markReplyPayloadAsRunTerminalErrorSurface(
+    markReplyPayloadForSourceSuppressionDelivery(payload),
+  );
   if (!isSilentReplyText(marked.text, SILENT_REPLY_TOKEN)) {
     marked.isError = true;
   }

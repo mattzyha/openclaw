@@ -109,7 +109,9 @@ function extractOAuthRefreshFailureProvider(message: string): string | null {
   return provider && provider.length > 0 ? provider : null;
 }
 
-function sanitizeOAuthRefreshFailureProvider(provider: string | null | undefined): string | null {
+export function sanitizeOAuthRefreshFailureProvider(
+  provider: string | null | undefined,
+): string | null {
   // Only return normalized provider ids that are safe to embed in shell guidance.
   const sanitized = provider ? sanitizeForLog(provider).replaceAll("`", "").trim() : "";
   const normalized = normalizeProviderId(sanitized);

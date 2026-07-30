@@ -252,6 +252,15 @@ export type ReplyPayloadMetadata = {
   beforeAgentRunBlocked?: boolean;
   /** Warning synthesized from an observed tool error after the run produced assistant output. */
   nonTerminalToolErrorWarning?: boolean;
+  /**
+   * Marks the payload as the run's terminal error surface (e.g. gateway-
+   * authored "please re-auth" for a Claude CLI auth failure). Channels
+   * that render a terminal-status indicator (Discord ❌ vs ✅) can consult
+   * this to reflect the run's outcome without setting the cross-channel
+   * `payload.isError` flag — which some channels (e.g. WhatsApp) treat
+   * as a hard drop.
+   */
+  runTerminalErrorSurface?: boolean;
 };
 
 const replyPayloadMetadata = new WeakMap<object, ReplyPayloadMetadata>();
@@ -299,6 +308,16 @@ export function markCommandReplyForDelivery(
     return reply.map((payload) => markReplyPayloadForSourceSuppressionDelivery(payload));
   }
   return markReplyPayloadForSourceSuppressionDelivery(reply);
+}
+
+export function markReplyPayloadAsRunTerminalErrorSurface<T extends object>(payload: T): T {
+  return setReplyPayloadMetadata(payload, {
+    runTerminalErrorSurface: true,
+  });
+}
+
+export function isReplyPayloadRunTerminalErrorSurface(payload: object): boolean {
+  return getReplyPayloadMetadata(payload)?.runTerminalErrorSurface === true;
 }
 
 /** Returns true for internal status/notice payloads, not assistant answer content. */

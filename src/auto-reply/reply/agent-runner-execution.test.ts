@@ -21,7 +21,10 @@ import {
   createUserTurnTranscriptRecorder,
   type PersistedUserTurnMessage,
 } from "../../sessions/user-turn-transcript.js";
-import { getReplyPayloadMetadata } from "../reply-payload.js";
+import {
+  getReplyPayloadMetadata,
+  isReplyPayloadRunTerminalErrorSurface,
+} from "../reply-payload.js";
 import type { TemplateContext } from "../templating.js";
 import { SILENT_REPLY_TOKEN } from "../tokens.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
@@ -7610,6 +7613,10 @@ describe("runAgentTurnWithFallback", () => {
       expect(result.payload.text).toBe(
         "⚠️ Model login expired on the gateway for openai. Send `/login codex` from a private chat or Web UI session to pair a new Codex login, or re-auth with `openclaw models auth login --provider openai` in a terminal, then try again.",
       );
+      // Marked as terminal error surface (Discord ❌); no payload.isError,
+      // which some channels (WhatsApp) filter out entirely.
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+      expect(result.payload.isError).toBeUndefined();
     }
   });
 
@@ -7799,6 +7806,8 @@ describe("runAgentTurnWithFallback", () => {
       expect(result.payload.text).toBe(
         "⚠️ Model login expired on the gateway for claude-cli. Re-auth with `claude auth login && openclaw models auth login --provider anthropic --method cli` in a terminal, then try again.",
       );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+      expect(result.payload.isError).toBeUndefined();
     }
   });
 
@@ -7880,6 +7889,317 @@ describe("runAgentTurnWithFallback", () => {
       expect(result.payload.text).toContain("openclaw configure");
       expect(result.payload.text).toContain("(invalid_grant)");
       expect(result.payload.text).not.toContain("Auth profile failover exhausted");
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+      expect(result.payload.isError).toBeUndefined();
+    }
+  });
+
+  it("surfaces re-auth guidance from a classified auth FailoverError without auth-profile metadata", async () => {
+    // Mirrors Claude CLI's live-session auth failure (createResultError):
+    // FailoverError with reason "auth" and no authProfileFailure.
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError("Invalid API key · Please run `/login`", {
+        reason: "auth",
+        provider: "anthropic",
+        model: "claude",
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
+      );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+      expect(result.payload.isError).toBeUndefined();
+    }
+  });
+
+  it("surfaces re-auth guidance from a classified auth_permanent FailoverError", async () => {
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError("api key revoked", {
+        reason: "auth_permanent",
+        provider: "anthropic",
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
+      );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+      expect(result.payload.isError).toBeUndefined();
+    }
+  });
+
+  it("keeps missing-API-key repair copy when the error is coerced to a FailoverError with reason auth", async () => {
+    // model-fallback.coerceToFailoverError wraps common auth-classified
+    // errors ("No API key found for provider ...") into FailoverError with
+    // reason="auth". The last-resort structural auth detector must not
+    // preempt the missing-key doctor/fix copy for that shape.
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError('No API key found for provider "openai".', {
+        reason: "auth",
+        provider: "openai",
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        '⚠️ Missing API key for provider "openai". Run `openclaw doctor --fix` to repair stale OpenAI model/session routes, restart the gateway if doctor asks, then try again. If doctor has nothing to repair or the error persists, re-auth with `openclaw models auth login --provider openai` or run `openclaw configure`.',
+      );
+      expect(result.payload.text).not.toContain("Model login expired");
+    }
+  });
+
+  it("keeps transient OAuth-refresh copy when the error is coerced to a FailoverError with reason auth", async () => {
+    // A refresh failure without a permanent reason classifier should still
+    // ride the try-again OAuth-refresh copy, not the definitive "login
+    // expired" copy from the last-resort structural auth detector.
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError(
+        "OAuth token refresh failed for openai: network timed out. Please try again or re-authenticate.",
+        {
+          reason: "auth",
+          provider: "openai",
+        },
+      ),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        "⚠️ Model login failed on the gateway for openai. Please try again. If this keeps happening, re-auth with `openclaw models auth login --provider openai`.",
+      );
+    }
+  });
+
+  it("surfaces re-auth guidance from a FallbackSummaryError whose attempts carry an auth reason", async () => {
+    // Mirrors the multi-attempt path: throwFallbackFailureSummary wraps every
+    // provider skip and re-throws as FallbackSummaryError once the chain is
+    // exhausted (see src/agents/model-fallback.ts).
+    const summary = new Error(
+      "All models failed (1): anthropic/claude: Invalid API key · Please run `/login` (auth)",
+    );
+    summary.name = "FallbackSummaryError";
+    Object.assign(summary, {
+      attempts: [
+        {
+          provider: "anthropic",
+          model: "claude",
+          reason: "auth",
+          error: "Invalid API key · Please run `/login`",
+        },
+      ],
+      soonestCooldownExpiry: null,
+    });
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(summary);
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
+      );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+      expect(result.payload.isError).toBeUndefined();
+    }
+  });
+
+  it("surfaces re-auth copy for Anthropic's authentication_error / invalid x-api-key body", async () => {
+    // Real Anthropic 401 body:
+    // {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError('{"type":"authentication_error","message":"invalid x-api-key"}', {
+        reason: "auth",
+        provider: "anthropic",
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
+      );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+    }
+  });
+
+  it("surfaces re-auth copy for a leading 'invalid token' auth failure", async () => {
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError("invalid token", {
+        reason: "auth",
+        provider: "openai",
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        "⚠️ Model login expired on the gateway for openai. Re-auth with `openclaw models auth login --provider openai`, then try again.",
+      );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+    }
+  });
+
+  it("surfaces re-auth copy for the model-fallback auth-skip summary text", async () => {
+    // model-fallback skips a provider whose auth failed on the first
+    // attempt with { type: "skip", error: "Provider X has auth issue
+    // (skipping all models)" } and pushes that as the attempt error.
+    // The summary text carries no credential wording, but every attempt
+    // is auth-classified — the structural signal is strong enough to
+    // bypass looksLikeCredentialExpiryMessage.
+    const summary = new Error(
+      "All models failed (2): anthropic/claude: Provider anthropic has auth issue (skipping all models) (auth) | anthropic/claude-2: Provider anthropic has auth issue (skipping all models) (auth). Re-authenticate with: openclaw models auth login --provider anthropic",
+    );
+    summary.name = "FallbackSummaryError";
+    Object.assign(summary, {
+      attempts: [
+        {
+          provider: "anthropic",
+          model: "claude",
+          reason: "auth",
+          error: "Provider anthropic has auth issue (skipping all models)",
+        },
+        {
+          provider: "anthropic",
+          model: "claude-2",
+          reason: "auth",
+          error: "Provider anthropic has auth issue (skipping all models)",
+        },
+      ],
+      soonestCooldownExpiry: null,
+    });
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(summary);
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
+      );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+    }
+  });
+
+  it("does not emit re-auth copy for an auth-classified failure whose message is not credential-shaped", async () => {
+    // 401/403 authorization failures (e.g. org/model access denied) classify
+    // as reason="auth" too. Re-auth won't fix them, so the branch must
+    // fall through and let the generic fallback surface the actual cause.
+    // The generic fallback is still a terminal run failure, so the
+    // run-terminal-error-surface marker still fires (Discord ❌ correct);
+    // only the copy differs from the "Model login expired" case.
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError("403 Your organization does not have access to model claude-opus-5", {
+        reason: "auth",
+        provider: "anthropic",
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).not.toContain("Model login expired");
+    }
+  });
+
+  it("does not emit re-auth copy for an all-auth FallbackSummaryError whose attempts are all authorization/scope failures", async () => {
+    // Fallback chain hits 403 org/model-access denials on every attempt.
+    // Every attempt classifies reason=auth structurally, but the per-
+    // attempt error strings are authorization/scope failures — re-auth
+    // won't fix them, so the definitive re-auth copy must NOT fire.
+    const summary = new Error(
+      "All models failed (2): anthropic/claude-opus-5: 403 Your organization does not have access to model claude-opus-5 (auth) | anthropic/claude-sonnet-5: 403 Your organization does not have access to model claude-sonnet-5 (auth)",
+    );
+    summary.name = "FallbackSummaryError";
+    Object.assign(summary, {
+      attempts: [
+        {
+          provider: "anthropic",
+          model: "claude-opus-5",
+          reason: "auth",
+          error: "403 Your organization does not have access to model claude-opus-5",
+        },
+        {
+          provider: "anthropic",
+          model: "claude-sonnet-5",
+          reason: "auth",
+          error: "403 Your organization does not have access to model claude-sonnet-5",
+        },
+      ],
+      soonestCooldownExpiry: null,
+    });
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(summary);
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).not.toContain("Model login expired");
+    }
+  });
+
+  it("does not emit the definitive re-auth copy for a mixed-cause FallbackSummaryError", async () => {
+    // A mixed-cause exhaustion (e.g. primary rate-limited, secondary
+    // auth-failed) must fall through to the generic summary so the actual
+    // blocking failure and provider stay visible. Otherwise users get
+    // "login expired for [secondary]" pointing at the wrong provider.
+    const summary = new Error(
+      "All models failed (2): anthropic/claude: rate limit exceeded (rate_limit) | fallback/other: invalid api key (auth)",
+    );
+    summary.name = "FallbackSummaryError";
+    Object.assign(summary, {
+      attempts: [
+        {
+          provider: "anthropic",
+          model: "claude",
+          reason: "rate_limit",
+          error: "rate limit exceeded",
+        },
+        {
+          provider: "fallback",
+          model: "other",
+          reason: "auth",
+          error: "invalid api key",
+        },
+      ],
+      soonestCooldownExpiry: null,
+    });
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(summary);
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).not.toContain("Model login expired");
     }
   });
 

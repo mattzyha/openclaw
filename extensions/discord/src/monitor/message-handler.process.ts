@@ -34,6 +34,7 @@ import { createChannelHistoryWindow } from "openclaw/plugin-sdk/reply-history";
 import {
   getReplyPayloadTtsSupplement,
   isReplyPayloadNonTerminalToolErrorWarning,
+  isReplyPayloadRunTerminalErrorSurface,
   resolveSendableOutboundReplyParts,
 } from "openclaw/plugin-sdk/reply-payload";
 import type { ReplyDispatchKind, ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
@@ -537,6 +538,15 @@ async function processDiscordMessageInner(
   };
   let userFacingFinalDelivered = false;
   let userFacingFinalDeliveryFailed = false;
+  // Set when a final payload marked as the run's terminal error surface
+  // (e.g. the gateway-authored "please re-auth" reply for a Claude CLI
+  // auth failure) is successfully delivered. Delivery of the message
+  // itself succeeds, so failedCounts.final stays at 0 — but the run
+  // failed, and the terminal reaction should be ❌ rather than the ✅ that
+  // dispatchResult.failedCounts alone would produce. Metadata-based so it
+  // stays Discord-local and does not affect payload delivery on channels
+  // that filter isError (e.g. WhatsApp).
+  let userFacingFinalErrorDelivered = false;
   let pendingToolWarningFinal:
     | { payload: ReplyPayload; info: { kind: ReplyDispatchKind } }
     | undefined;
@@ -546,6 +556,11 @@ async function processDiscordMessageInner(
     pendingToolWarningFinal = undefined;
     draftPreview.markFinalReplyDelivered();
     observer?.onFinalReplyDelivered?.();
+  };
+  const noteFinalDeliveredForTerminalReaction = (payload: ReplyPayload) => {
+    if (isReplyPayloadRunTerminalErrorSurface(payload)) {
+      userFacingFinalErrorDelivered = true;
+    }
   };
   // Per-line quoting survives Discord chunking; blank quote rows render badly.
   const formatDiscordReasoningQuote = (quoteText: string): string | undefined => {
@@ -870,6 +885,11 @@ async function processDiscordMessageInner(
           },
           onPreviewFinalized: () => {
             markUserFacingFinalDelivered();
+            // Pass the original `payload`, not `effectivePayload` (spread
+            // when transcript-backed text differs) — ReplyPayloadMetadata
+            // is WeakMap-keyed by object identity, so a spread would drop
+            // the terminal-error marker.
+            noteFinalDeliveredForTerminalReaction(payload);
             draftPreview.markPreviewFinalized();
             replyReference.markSent();
           },
@@ -920,6 +940,8 @@ async function processDiscordMessageInner(
         },
         onNormalDelivered: () => {
           markUserFacingFinalDelivered();
+          // See onPreviewFinalized note on payload identity.
+          noteFinalDeliveredForTerminalReaction(payload);
           replyReference.markSent();
         },
       });
@@ -965,8 +987,11 @@ async function processDiscordMessageInner(
       kind: info.kind,
     });
     replyReference.markSent();
-    if (isFinal && deliverablePayload.isError !== true) {
-      markUserFacingFinalDelivered();
+    if (isFinal) {
+      if (deliverablePayload.isError !== true) {
+        markUserFacingFinalDelivered();
+      }
+      noteFinalDeliveredForTerminalReaction(deliverablePayload);
     }
     return { visibleReplySent: true };
   };
@@ -1281,7 +1306,7 @@ async function processDiscordMessageInner(
     await draftPreview.cleanup();
     const finalDeliveryFailed = (dispatchResult?.failedCounts?.final ?? 0) > 0;
     if (statusReactionsActive) {
-      const failed = dispatchError || finalDeliveryFailed;
+      const failed = dispatchError || finalDeliveryFailed || userFacingFinalErrorDelivered;
       if (dispatchAborted) {
         // Aborts produce no user-visible reply; surface ❌ so the operator
         // sees a terminal failure indicator instead of a silently-cleared

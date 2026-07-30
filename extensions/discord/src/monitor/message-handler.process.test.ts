@@ -967,6 +967,85 @@ describe("processDiscordMessage ack reactions", () => {
     expect(emojis).not.toContain(DEFAULT_EMOJIS.done);
   });
 
+  it("surfaces the error reaction when a final run-terminal-error-surface payload is successfully delivered", async () => {
+    // A gateway-authored auth-failure reply (e.g. "please re-auth") lands
+    // as a final payload marked as the run's terminal error surface via
+    // metadata. Delivery itself succeeds, so failedCounts.final stays at
+    // 0 — but the run failed and the terminal reaction should reflect
+    // that with ❌ instead of ✅.
+    dispatchInboundMessage.mockImplementationOnce(async (params?: DispatchInboundParams) => {
+      await params?.dispatcher.sendFinalReply(
+        setReplyPayloadMetadata(
+          {
+            text: "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
+          },
+          { runTerminalErrorSurface: true },
+        ) as never,
+      );
+      return { queuedFinal: true, counts: { final: 1, tool: 0, block: 0 } };
+    });
+
+    const ctx = await createAutomaticSourceDeliveryContext();
+
+    await runProcessDiscordMessage(ctx);
+
+    const emojis = getReactionEmojis();
+    expect(emojis).toContain(DEFAULT_EMOJIS.error);
+    expect(emojis).not.toContain(DEFAULT_EMOJIS.done);
+  });
+
+  it("surfaces the error reaction for terminal-error finals delivered through the draft preview path", async () => {
+    // Draft preview delivery (streamMode: "partial") finalizes finals via
+    // deliverWithFinalizableLivePreviewAdapter callbacks, not the
+    // standard-send tail — the terminal-error marker check must fire from
+    // those callbacks too so streamed Discord accounts get ❌ on failed
+    // runs. Regression guard for the auth-failure path when live preview
+    // is enabled.
+    dispatchInboundMessage.mockImplementationOnce(async (params?: DispatchInboundParams) => {
+      await params?.dispatcher.sendFinalReply(
+        setReplyPayloadMetadata(
+          {
+            text: "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
+          },
+          { runTerminalErrorSurface: true },
+        ) as never,
+      );
+      return { queuedFinal: true, counts: { final: 1, tool: 0, block: 0 } };
+    });
+
+    const ctx = await createAutomaticSourceDeliveryContext({
+      discordConfig: { streamMode: "partial", maxLinesPerMessage: 5 },
+    });
+
+    await runProcessDiscordMessage(ctx);
+
+    const emojis = getReactionEmojis();
+    expect(emojis).toContain(DEFAULT_EMOJIS.error);
+    expect(emojis).not.toContain(DEFAULT_EMOJIS.done);
+  });
+
+  it("keeps the done reaction for isError finals without the run-terminal-error-surface marker", async () => {
+    // An isError final that reaches the delivery tail (i.e. not a
+    // deferred fallback-only tool-warning) but is NOT marked as the run's
+    // terminal error surface must not flip the terminal reaction to ❌ —
+    // only the metadata marker gates the ❌ path.
+    dispatchInboundMessage.mockImplementationOnce(async (params?: DispatchInboundParams) => {
+      await params?.dispatcher.sendFinalReply({
+        text: "⚠️ 🛠️ `bash` failed",
+        isError: true,
+      } as never);
+      return { queuedFinal: true, counts: { final: 1, tool: 0, block: 0 } };
+    });
+
+    const ctx = await createAutomaticSourceDeliveryContext();
+
+    await runProcessDiscordMessage(ctx);
+
+    const emojis = getReactionEmojis();
+    expect(emojis).toContain(DEFAULT_EMOJIS.done);
+    expect(emojis).not.toContain(DEFAULT_EMOJIS.error);
+  });
+
   it("can bind status reactions to an explicitly tracked reaction target", async () => {
     vi.useFakeTimers();
     dispatchInboundMessage.mockImplementationOnce(async (params?: DispatchInboundParams) => {

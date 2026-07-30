@@ -65,6 +65,7 @@ import {
 import { DEFAULT_HEARTBEAT_ACK_MAX_CHARS, stripHeartbeatToken } from "../heartbeat.js";
 import {
   isReplyPayloadStatusNotice,
+  markReplyPayloadAsRunTerminalErrorSurface,
   markReplyPayloadForSourceSuppressionDelivery,
   setReplyPayloadMetadata,
 } from "../reply-payload.js";
@@ -184,12 +185,14 @@ function buildSilentFallbackFailurePayload(params: {
   ) {
     return undefined;
   }
-  return markReplyPayloadForSourceSuppressionDelivery({
-    text:
-      `⚠️ I couldn't reach the configured model backend ${params.fallbackTransition.selectedModelRef}. ` +
-      `Fallback used ${params.fallbackTransition.activeModelRef}, but it produced no visible reply.`,
-    isError: true,
-  });
+  return markReplyPayloadAsRunTerminalErrorSurface(
+    markReplyPayloadForSourceSuppressionDelivery({
+      text:
+        `⚠️ I couldn't reach the configured model backend ${params.fallbackTransition.selectedModelRef}. ` +
+        `Fallback used ${params.fallbackTransition.activeModelRef}, but it produced no visible reply.`,
+      isError: true,
+    }),
+  );
 }
 
 function resolveSourceReplyPolicy(params: {
@@ -2682,25 +2685,31 @@ export async function runReplyAgent(params: {
         return returnWithQueuedFollowupDrain({ text: SILENT_REPLY_TOKEN });
       }
       return returnWithQueuedFollowupDrain(
-        markReplyPayloadForSourceSuppressionDelivery({
-          text: RESTART_LIFECYCLE_REPLY_TEXT,
-        }),
+        markReplyPayloadAsRunTerminalErrorSurface(
+          markReplyPayloadForSourceSuppressionDelivery({
+            text: RESTART_LIFECYCLE_REPLY_TEXT,
+          }),
+        ),
       );
     }
     if (error instanceof GatewayDrainingError) {
       replyOperation.fail("gateway_draining", error);
       return returnWithQueuedFollowupDrain(
-        markReplyPayloadForSourceSuppressionDelivery({
-          text: RESTART_LIFECYCLE_REPLY_TEXT,
-        }),
+        markReplyPayloadAsRunTerminalErrorSurface(
+          markReplyPayloadForSourceSuppressionDelivery({
+            text: RESTART_LIFECYCLE_REPLY_TEXT,
+          }),
+        ),
       );
     }
     if (error instanceof CommandLaneClearedError) {
       replyOperation.fail("command_lane_cleared", error);
       return returnWithQueuedFollowupDrain(
-        markReplyPayloadForSourceSuppressionDelivery({
-          text: RESTART_LIFECYCLE_REPLY_TEXT,
-        }),
+        markReplyPayloadAsRunTerminalErrorSurface(
+          markReplyPayloadForSourceSuppressionDelivery({
+            text: RESTART_LIFECYCLE_REPLY_TEXT,
+          }),
+        ),
       );
     }
     const knownFailurePayload = buildKnownAgentRunFailureReplyPayload({

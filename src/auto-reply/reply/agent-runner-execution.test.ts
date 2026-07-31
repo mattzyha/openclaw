@@ -7918,6 +7918,32 @@ describe("runAgentTurnWithFallback", () => {
     }
   });
 
+  it("surfaces re-auth guidance for Claude CLI 'Not logged in · Please run /login' even when reason=unknown", async () => {
+    // Claude CLI emits "Not logged in · Please run /login" after auth
+    // logout. classifyFailoverReason at errors.ts:1561 returns null for
+    // that text (AUTH_INVALID_TOKEN_HINT_RE doesn't match "logged in"),
+    // so createResultError constructs FailoverError with reason="unknown".
+    // The message-level fallback must catch it independently.
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError("Not logged in · Please run /login", {
+        reason: "unknown",
+        provider: "anthropic",
+        model: "claude",
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(
+        "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
+      );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+    }
+  });
+
   it("surfaces re-auth guidance from a classified auth_permanent FailoverError", async () => {
     state.runEmbeddedAgentMock.mockRejectedValueOnce(
       new FailoverError("api key revoked", {

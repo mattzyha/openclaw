@@ -788,13 +788,6 @@ function hasBillingAttemptSummary(err: unknown): boolean {
 
 type AuthAttemptFailureDetail = {
   provider: string | null;
-  // Where the classification came from. "summary" (all-auth
-  // FallbackSummaryError) is a strong structural signal — every attempt
-  // in the chain was auth-classified — so message-level confirmation is
-  // not required. "failover" (single FailoverError with reason=auth) is
-  // still gated on looksLikeCredentialExpiryMessage because a bare 401/
-  // 403 may be an authorization/scope failure that re-auth won't fix.
-  origin: "failover" | "summary";
 };
 
 // Structural detection for classified auth failures that don't flow through
@@ -817,7 +810,7 @@ type AuthAttemptFailureDetail = {
 // so those cases still surface the underlying error text via the
 // generic fallback (which respects includeDetails for verbose runs).
 const AUTH_CREDENTIAL_EXPIRY_HINT_RE =
-  /\b(?:invalid|incorrect|expired|stale|revoked)[_\s-]?x?[_\s-]?api[_\s-]?key\b|\bx?[_\s-]?api[_\s-]?key\s+(?:is\s+)?(?:invalid|expired|revoked|incorrect)\b|\bplease\s+run\s+`?\/?login\b|\boauth\s+token\s+(?:has\s+)?expired\b|\btoken\s+(?:has\s+)?expired\b|\b(?:invalid|revoked)[_\s-]?token\b|\btoken\s+(?:is\s+)?(?:invalid|revoked)\b|\bplease\s+re-?authenticate\b|\bauthentication[_\s-]?error\b/i;
+  /\b(?:invalid|incorrect|expired|stale|revoked)[_\s-]?x?[_\s-]?api[_\s-]?key\b|\bx?[_\s-]?api[_\s-]?key\s+(?:is\s+)?(?:invalid|expired|revoked|incorrect)\b|\bplease\s+run\s+`?\/?login\b|\boauth\s+token\s+(?:has\s+)?expired\b|\btoken\s+(?:has\s+)?expired\b|\b(?:invalid|revoked)[_\s-]?token\b|\btoken\s+(?:is\s+)?(?:invalid|revoked)\b|\bplease\s+re-?authenticate\b|\bauthentication[_\s-]?error\b|\bnot\s+logged\s+in\b|\bsign\s+in\s+again\b/i;
 
 function looksLikeCredentialExpiryMessage(message: string): boolean {
   return AUTH_CREDENTIAL_EXPIRY_HINT_RE.test(message);
@@ -833,21 +826,33 @@ function isAuthCooldownSkipMessage(text: string): boolean {
   return AUTH_COOLDOWN_SKIP_MESSAGE_RE.test(text);
 }
 
-function detectAuthAttemptFailure(err: unknown): AuthAttemptFailureDetail | null {
+function detectAuthAttemptFailure(
+  err: unknown,
+  normalizedMessage: string,
+): AuthAttemptFailureDetail | null {
+  const messageCredentialShaped = looksLikeCredentialExpiryMessage(normalizedMessage);
   if (isFailoverError(err)) {
-    if (err.reason !== "auth" && err.reason !== "auth_permanent") {
-      return null;
-    }
     // The typed auth-profile failover copy is richer than the generic
     // re-auth line; defer to it when the FailoverError already carries
     // that structured detail so buildAuthProfileFailoverFailureText wins.
     if (err.authProfileFailure) {
       return null;
     }
-    return {
-      provider: typeof err.provider === "string" ? err.provider : null,
-      origin: "failover",
-    };
+    const structurallyAuth = err.reason === "auth" || err.reason === "auth_permanent";
+    // Structural signal alone isn't enough for the FailoverError case —
+    // every 401/403 classifies as reason=auth upstream, including
+    // authorization/scope failures where re-auth doesn't help. Message
+    // must also read as credential expiry. When the upstream classifier
+    // misses the credential signal (e.g. Claude CLI's "Not logged in ·
+    // Please run /login" classifies reason=unknown), the message-level
+    // check catches it independently.
+    if (structurallyAuth && messageCredentialShaped) {
+      return { provider: typeof err.provider === "string" ? err.provider : null };
+    }
+    if (messageCredentialShaped) {
+      return { provider: typeof err.provider === "string" ? err.provider : null };
+    }
+    return null;
   }
   if (isFallbackSummaryError(err)) {
     if (err.attempts.length === 0) {
@@ -888,8 +893,13 @@ function detectAuthAttemptFailure(err: unknown): AuthAttemptFailureDetail | null
         attemptWithProvider && typeof attemptWithProvider.provider === "string"
           ? attemptWithProvider.provider
           : null,
-      origin: "summary",
     };
+  }
+  // Non-typed errors: fall back to message-level detection so credential-
+  // expiry text still surfaces as re-auth even without structural
+  // classification (e.g. a plain Error whose message is "Please run /login").
+  if (messageCredentialShaped) {
+    return { provider: null };
   }
   return null;
 }
@@ -1153,11 +1163,8 @@ function buildExternalRunFailureReply(
   // authorization failures (e.g. "does not have access to model", "not
   // allowed for this organization") still surface the underlying error
   // text via the generic fallback — re-auth doesn't fix those.
-  const authAttemptFailure = detectAuthAttemptFailure(error);
-  if (
-    authAttemptFailure &&
-    (authAttemptFailure.origin === "summary" || looksLikeCredentialExpiryMessage(normalizedMessage))
-  ) {
+  const authAttemptFailure = detectAuthAttemptFailure(error, normalizedMessage);
+  if (authAttemptFailure) {
     const sanitizedProvider = sanitizeOAuthRefreshFailureProvider(authAttemptFailure.provider);
     const loginCommand = buildOAuthRefreshFailureLoginCommand(sanitizedProvider);
     const providerLabel = sanitizedProvider ? ` for ${sanitizedProvider}` : "";

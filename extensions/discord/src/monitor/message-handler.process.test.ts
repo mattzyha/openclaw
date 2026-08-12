@@ -1258,6 +1258,102 @@ describe("processDiscordMessage ack reactions", () => {
     });
   });
 
+  it("surfaces an error reaction on dispatch abort when statusReactions.stickyError is enabled", async () => {
+    const abortController = new AbortController();
+    dispatchInboundMessage.mockImplementationOnce(async () => {
+      abortController.abort();
+      throw new Error("aborted");
+    });
+
+    const ctx = await createAutomaticSourceDeliveryContext({
+      abortSignal: abortController.signal,
+      cfg: {
+        messages: {
+          ackReaction: "👀",
+          removeAckAfterReply: true,
+          statusReactions: {
+            stickyError: true,
+          },
+        },
+        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+      },
+    });
+
+    await runProcessDiscordMessage(ctx);
+
+    await vi.waitFor(() => expect(sendMocks.removeReactionDiscord).toHaveBeenCalled());
+    expect(getReactionEmojis()).toContain(DEFAULT_EMOJIS.error);
+    expectRemoveAckCallAt(0, "👀", {
+      accountId: "default",
+      ackReaction: "👀",
+      removeAckAfterReply: true,
+    });
+  });
+
+  it("never clears the error reaction when statusReactions.stickyError is enabled", async () => {
+    vi.useFakeTimers();
+    dispatchInboundMessage.mockImplementationOnce(async () => ({
+      queuedFinal: false,
+      counts: { final: 0, tool: 0, block: 0 },
+      failedCounts: { final: 1 },
+    }));
+
+    const ctx = await createAutomaticSourceDeliveryContext({
+      cfg: {
+        messages: {
+          ackReaction: "👀",
+          removeAckAfterReply: true,
+          statusReactions: {
+            stickyError: true,
+            timing: { errorHoldMs: 4_000, debounceMs: 0 },
+          },
+        },
+        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+      },
+    });
+
+    await runProcessDiscordMessage(ctx);
+    expect(getReactionEmojis()).toContain(DEFAULT_EMOJIS.error);
+
+    await vi.advanceTimersByTimeAsync(4_001);
+    await vi.runAllTimersAsync();
+    expect(sendMocks.removeReactionDiscord).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      DEFAULT_EMOJIS.error,
+      expect.anything(),
+    );
+  });
+
+  it("awaits done cleanup inline when statusReactions.awaitTerminalCleanup is enabled", async () => {
+    dispatchInboundMessage.mockImplementationOnce(async () => createNoQueuedDispatchResult());
+
+    const ctx = await createAutomaticSourceDeliveryContext({
+      cfg: {
+        messages: {
+          ackReaction: "👀",
+          removeAckAfterReply: true,
+          statusReactions: {
+            awaitTerminalCleanup: true,
+            timing: { doneHoldMs: 20, debounceMs: 0 },
+          },
+        },
+        session: { store: "/tmp/openclaw-discord-process-test-sessions.json" },
+      },
+    });
+
+    await runProcessDiscordMessage(ctx);
+
+    // Inline-awaited cleanup: the done reaction is already removed by the
+    // time the handler returns — no vi.waitFor needed.
+    expect(sendMocks.removeReactionDiscord).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      DEFAULT_EMOJIS.done,
+      expect.anything(),
+    );
+  });
+
   it("removes the plain ack reaction when status reactions are disabled and removeAckAfterReply is enabled", async () => {
     const ctx = await createAutomaticSourceDeliveryContext({
       cfg: {

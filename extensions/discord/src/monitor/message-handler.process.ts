@@ -267,6 +267,8 @@ async function processDiscordMessageInner(
     ...DEFAULT_TIMING,
     ...cfg.messages?.statusReactions?.timing,
   };
+  const stickyErrorReaction = cfg.messages?.statusReactions?.stickyError === true;
+  const awaitTerminalCleanup = cfg.messages?.statusReactions?.awaitTerminalCleanup === true;
   let statusReactionTarget = `${messageChannelId}/${message.id}`;
   let statusReactionsActive = statusReactionsEnabled;
   let statusReactions = createStatusReactionController({
@@ -1309,7 +1311,14 @@ async function processDiscordMessageInner(
       const failed = dispatchError || finalDeliveryFailed || userFacingFinalErrorDelivered;
       if (dispatchAborted) {
         if (removeAckAfterReply) {
-          void statusReactions.clear();
+          if (stickyErrorReaction) {
+            // Aborts produce no user-visible reply; stickyError surfaces a
+            // permanent ❌ so the operator sees a terminal failure indicator
+            // instead of a silently-cleared reaction state.
+            await statusReactions.setError();
+          } else {
+            void statusReactions.clear();
+          }
         } else {
           void statusReactions.restoreInitial();
         }
@@ -1320,12 +1329,27 @@ async function processDiscordMessageInner(
           await statusReactions.setDone();
         }
         if (removeAckAfterReply) {
-          void (async () => {
-            await sleep(
-              failed ? statusReactionTiming.errorHoldMs : statusReactionTiming.doneHoldMs,
-            );
-            await statusReactions.clear();
-          })();
+          if (failed && stickyErrorReaction) {
+            // stickyError: leave ❌ in place permanently so an operator
+            // returning later (e.g. overnight runs) still sees the failure.
+          } else {
+            const holdAndClearTerminalReaction = async () => {
+              await sleep(
+                failed ? statusReactionTiming.errorHoldMs : statusReactionTiming.doneHoldMs,
+              );
+              await statusReactions.clear();
+            };
+            if (awaitTerminalCleanup) {
+              // Awaited (not fire-and-forget) so the gateway's restart drain
+              // waits for cleanup to complete before exiting — otherwise a
+              // restart inside the hold window strands the terminal reaction
+              // on the user's message. Holds this channel's serialized run
+              // slot for the hold duration.
+              await holdAndClearTerminalReaction();
+            } else {
+              void holdAndClearTerminalReaction();
+            }
+          }
         } else {
           void statusReactions.restoreInitial();
         }

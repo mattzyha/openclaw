@@ -106,6 +106,19 @@ export type StatusReactionsConfig = {
   emojis?: StatusReactionsEmojiConfig;
   /** Override default timing. */
   timing?: StatusReactionsTimingConfig;
+  /**
+   * Never clear the error reaction: a failed run keeps its ❌ permanently
+   * (including on dispatch abort) instead of clearing after errorHoldMs,
+   * so unattended failures stay visible. Default: false.
+   */
+  stickyError?: boolean;
+  /**
+   * Await the terminal-reaction hold/cleanup inline instead of
+   * fire-and-forget, so a gateway restart drain finishes the cleanup and
+   * cannot strand a terminal reaction on the trigger message. Holds the
+   * channel's serialized run slot for the hold duration. Default: false.
+   */
+  awaitTerminalCleanup?: boolean;
 };
 
 export type MessagesConfig = {

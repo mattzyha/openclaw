@@ -1004,6 +1004,8 @@ export const FIELD_LABELS: Record<string, string> = {
   "messages.statusReactions.enabled": "Enable Status Reactions",
   "messages.statusReactions.emojis": "Status Reaction Emojis",
   "messages.statusReactions.timing": "Status Reaction Timing",
+  "messages.statusReactions.stickyError": "Sticky Error Reaction",
+  "messages.statusReactions.awaitTerminalCleanup": "Await Terminal Reaction Cleanup",
   "messages.inbound.debounceMs": "Inbound Message Debounce (ms)",
   "messages.inbound.byChannel": "Inbound Debounce by Channel (ms)",
   "messages.tts": "Message Text-to-Speech",

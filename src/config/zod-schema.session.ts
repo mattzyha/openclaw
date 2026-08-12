@@ -203,6 +203,8 @@ export const MessagesSchema = z
           })
           .strict()
           .optional(),
+        stickyError: z.boolean().optional(),
+        awaitTerminalCleanup: z.boolean().optional(),
       })
       .strict()
       .optional(),

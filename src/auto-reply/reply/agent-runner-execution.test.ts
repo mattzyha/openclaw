@@ -7613,10 +7613,11 @@ describe("runAgentTurnWithFallback", () => {
       expect(result.payload.text).toBe(
         "⚠️ Model login expired on the gateway for openai. Send `/login codex` from a private chat or Web UI session to pair a new Codex login, or re-auth with `openclaw models auth login --provider openai` in a terminal, then try again.",
       );
-      // Marked as terminal error surface (Discord ❌); no payload.isError,
-      // which some channels (WhatsApp) filter out entirely.
+      // Marked as terminal error surface (Discord ❌). Upstream's
+      // markAgentRunFailureReplyPayload also sets payload.isError on
+      // non-silent terminal failures since v2026.7.x (#99304).
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
-      expect(result.payload.isError).toBeUndefined();
+      expect(result.payload.isError).toBe(true);
     }
   });
 
@@ -7807,7 +7808,7 @@ describe("runAgentTurnWithFallback", () => {
         "⚠️ Model login expired on the gateway for claude-cli. Re-auth with `claude auth login && openclaw models auth login --provider anthropic --method cli` in a terminal, then try again.",
       );
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
-      expect(result.payload.isError).toBeUndefined();
+      expect(result.payload.isError).toBe(true);
     }
   });
 
@@ -7890,7 +7891,7 @@ describe("runAgentTurnWithFallback", () => {
       expect(result.payload.text).toContain("(invalid_grant)");
       expect(result.payload.text).not.toContain("Auth profile failover exhausted");
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
-      expect(result.payload.isError).toBeUndefined();
+      expect(result.payload.isError).toBe(true);
     }
   });
 
@@ -7914,7 +7915,7 @@ describe("runAgentTurnWithFallback", () => {
         "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
       );
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
-      expect(result.payload.isError).toBeUndefined();
+      expect(result.payload.isError).toBe(true);
     }
   });
 
@@ -7961,7 +7962,7 @@ describe("runAgentTurnWithFallback", () => {
         "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
       );
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
-      expect(result.payload.isError).toBeUndefined();
+      expect(result.payload.isError).toBe(true);
     }
   });
 
@@ -8009,7 +8010,7 @@ describe("runAgentTurnWithFallback", () => {
     expect(result.kind).toBe("final");
     if (result.kind === "final") {
       expect(result.payload.text).toBe(
-        "⚠️ Model login failed on the gateway for openai. Please try again. If this keeps happening, re-auth with `openclaw models auth login --provider openai`.",
+        "⚠️ Model login failed on the gateway for openai. Please try again. If this keeps happening, send `/login codex` from a private chat or Web UI session to pair a new Codex login, or re-auth with `openclaw models auth login --provider openai` in a terminal.",
       );
     }
   });
@@ -8044,7 +8045,7 @@ describe("runAgentTurnWithFallback", () => {
         "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
       );
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
-      expect(result.payload.isError).toBeUndefined();
+      expect(result.payload.isError).toBe(true);
     }
   });
 

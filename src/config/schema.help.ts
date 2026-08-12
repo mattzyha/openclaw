@@ -2019,6 +2019,10 @@ export const FIELD_HELP: Record<string, string> = {
     "Override default status reaction emojis. Keys: queued, thinking, compacting, tool, coding, web, deploy, build, concierge, done, error, stallSoft, stallHard. Telegram chooses the first supported fallback when a configured emoji is not available in the chat.",
   "messages.statusReactions.timing":
     "Override default timing. Keys: debounceMs (700), stallSoftMs (10000), stallHardMs (30000), doneHoldMs (1500), errorHoldMs (2500).",
+  "messages.statusReactions.stickyError":
+    "Never clear the error reaction: a failed run keeps its ❌ permanently (including on dispatch abort) instead of clearing after errorHoldMs, so unattended failures stay visible. Default: false.",
+  "messages.statusReactions.awaitTerminalCleanup":
+    "Await the terminal-reaction hold/cleanup inline instead of fire-and-forget so a gateway restart drain finishes it and cannot strand a reaction. Holds the channel's serialized run slot for the hold duration. Default: false.",
   "messages.inbound.debounceMs":
     "Debounce window (ms) for batching rapid inbound messages from the same sender (0 to disable).",
 };

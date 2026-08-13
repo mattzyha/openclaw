@@ -1,8 +1,29 @@
 # Openclaw Fork — Status
 
-Snapshot of what's wired up, what's in progress, what's broken.
+`## Now` is the live dashboard — update it on state transitions (work
+completes / goes in-flight / blocks / decision lands), not just at
+checkpoints. The sections below it are the standing snapshot of what's
+wired up / open.
 
-_Last touched: 2026-07-30_
+## Now
+
+**In flight:**
+
+- (nothing)
+
+**Blocked on:**
+
+- (nothing)
+
+**Next:**
+
+- Checkpoint the sections below: they were last verified 2026-07-30
+  against openclaw 2026.6.2, before the 2026-08-12 upgrade to 2026.7.1-2
+  and the model rebinding (Fable 5 defaults + Opus 5 pins). Patch list,
+  version references, and watchdog notes need re-verification against the
+  upgraded fork.
+
+---
 
 ## Wired up & working
 

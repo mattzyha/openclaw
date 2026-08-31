@@ -680,6 +680,10 @@ function buildRateLimitCooldownMessage(err: unknown): string {
   if (codexUsageLimitMessage) {
     return codexUsageLimitMessage;
   }
+  const claudeCliUsageLimitMessage = extractClaudeCliUsageLimitErrorMessage(err);
+  if (claudeCliUsageLimitMessage) {
+    return claudeCliUsageLimitMessage;
+  }
   if (isFallbackSummaryError(err) && hasBillingAttemptSummary(err)) {
     return BILLING_ERROR_USER_MESSAGE;
   }
@@ -756,6 +760,45 @@ function extractCodexUsageLimitMessage(text: string): string | undefined {
     return undefined;
   }
   const message = sanitizeUserFacingText(text.slice(markerIndex), { errorContext: true })
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if (!message) {
+    return undefined;
+  }
+  return message.length > 500 ? `${truncateUtf16Safe(message, 497)}...` : message;
+}
+
+// Claude CLI subscription-limit text carries the reset time ("You've hit your
+// session limit · resets 8pm (America/Los_Angeles)"); surface it verbatim,
+// mirroring the Codex usage-limit handling above, instead of the generic
+// "temporarily rate-limited" copy that drops the only actionable detail.
+// Fork addition 2026-08-30; the qualifier ("session", "weekly", ...) is
+// composed dynamically by the CLI, so match the family rather than one phrase.
+const CLAUDE_CLI_USAGE_LIMIT_RE = /\byou['’]?ve hit your(?: [a-z0-9-]+){0,3} limit\b/i;
+
+function extractClaudeCliUsageLimitErrorMessage(err: unknown): string | undefined {
+  if (isFallbackSummaryError(err)) {
+    for (const attempt of err.attempts) {
+      const message = extractClaudeCliUsageLimitMessage(attempt.error);
+      if (message) {
+        return `⚠️ ${message}`;
+      }
+    }
+    return undefined;
+  }
+  const message = extractClaudeCliUsageLimitMessage(formatErrorMessage(err));
+  return message ? `⚠️ ${message}` : undefined;
+}
+
+function extractClaudeCliUsageLimitMessage(text: string): string | undefined {
+  const match = CLAUDE_CLI_USAGE_LIMIT_RE.exec(text);
+  if (!match) {
+    return undefined;
+  }
+  const message = sanitizeUserFacingText(text.slice(match.index), { errorContext: true })
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean)

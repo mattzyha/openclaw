@@ -250,3 +250,24 @@ describe("Claude CLI OAuth session expiry (fork port of upstream #131345)", () =
     expect(classifyFailoverReason(loggedOutMessage, { provider: "claude-cli" })).toBe("auth");
   });
 });
+
+describe("Claude CLI subscription limit text (fork, 2026-08-30)", () => {
+  const sessionLimit = "You've hit your session limit · resets 8pm (America/Los_Angeles)";
+
+  it("classifies dynamically-qualified 'hit your … limit' text as rate_limit", () => {
+    expect(classifyFailoverReason(sessionLimit)).toBe("rate_limit");
+    expect(classifyFailoverReason(sessionLimit, { provider: "claude-cli" })).toBe("rate_limit");
+    expect(classifyFailoverReason("You've hit your weekly limit · resets Sep 2, 3am")).toBe(
+      "rate_limit",
+    );
+    expect(classifyFailoverReason("You’ve hit your limit · resets 8pm")).toBe("rate_limit");
+  });
+
+  it("keeps spend limits classified as billing", () => {
+    expect(classifyFailoverReason("You've hit your monthly spend limit.")).toBe("billing");
+  });
+
+  it("preserves the reset detail in user-facing rate-limit copy", () => {
+    expect(formatRateLimitOrOverloadedErrorCopy(sessionLimit)).toBe(`⚠️ ${sessionLimit}`);
+  });
+});

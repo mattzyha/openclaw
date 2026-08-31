@@ -213,8 +213,9 @@ vi.mock("../../agents/embedded-agent-helpers.js", async () => {
     isLikelyContextOverflowError: (message?: string) =>
       state.isLikelyContextOverflowErrorMock(message),
     isOverloadedErrorMessage: (message: string) => /overloaded|capacity/i.test(message),
-    isRateLimitErrorMessage: (message: string) =>
-      /rate.limit|too many requests|429|usage limit/i.test(message),
+    // Delegate to the real matcher so tests exercise the production phrase
+    // list (e.g. Claude CLI "You've hit your session limit"), not a stale stub.
+    isRateLimitErrorMessage: (message: string) => actual.isRateLimitErrorMessage(message),
     isTransientHttpError: () => false,
     sanitizeUserFacingText: (text?: string) => text ?? "",
   };
@@ -7979,6 +7980,39 @@ describe("runAgentTurnWithFallback", () => {
     if (result.kind === "final") {
       expect(result.payload.text).not.toBe(SILENT_REPLY_TOKEN);
       expect(result.payload.text).toContain("Model login expired on the gateway for claude-cli");
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+    }
+  });
+
+  it("surfaces Claude CLI session-limit text verbatim in a Discord channel (fork, 2026-08-30)", async () => {
+    // Live failure 2026-08-30 19:27-19:59: Claude Max session limit. The CLI
+    // said "You've hit your session limit · resets 8pm (America/Los_Angeles)";
+    // nothing matched the rate-limit phrase list ("usage limit" is Codex's
+    // wording), so reason=unknown -> generic copy -> silenced in channels.
+    // Now it classifies as rate_limit and the CLI text (with the reset time)
+    // is surfaced verbatim, Codex-style, so it posts in channels and flips ❌.
+    const message = "You've hit your session limit · resets 8pm (America/Los_Angeles)";
+    const reason = classifyFailoverReason(message, { provider: "claude-cli" }) ?? "unknown";
+    expect(reason).toBe("rate_limit");
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError(message, {
+        reason,
+        provider: "claude-cli",
+        model: "claude-fable-5",
+        status: resolveFailoverStatus(reason),
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(
+      createMinimalRunAgentTurnParams({
+        sessionCtx: createNonDirectFailureSessionCtx(NON_DIRECT_FAILURE_SURFACE_CASES[1]),
+      }),
+    );
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(`⚠️ ${message}`);
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
     }
   });

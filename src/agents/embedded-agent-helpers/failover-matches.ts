@@ -82,6 +82,12 @@ const ERROR_PATTERNS = {
     "throttled",
     "throttling",
     "usage limit",
+    // Claude CLI subscription limits compose the qualifier dynamically
+    // ("session", "weekly", "fast", "monthly", or none): "You've hit your
+    // session limit · resets 8pm (America/Los_Angeles)". Fork addition
+    // (2026-08-30): without this the text classified as unknown and the
+    // generic failure copy was silenced in group channels.
+    /\byou['’]?ve hit your(?: [a-z0-9-]+){0,3} limit\b/i,
     /\btpm\b/i,
     "tokens per minute",
     "tokens per day",

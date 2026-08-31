@@ -17,6 +17,14 @@ wired up / open.
 
 **Next:**
 
+- Retire fork patch `c1de8eebf9c` (Claude CLI subscription-limit "You've hit
+  your … limit" → rate_limit + verbatim `⚠️` copy in channels) if/when upstream
+  ships equivalent handling — check `git grep -i "hit your" upstream/main -- src`
+  at each rebase. Deployed + verified 2026-08-30 21:02: gateway restarted on
+  the 21:00 dist (pid 284924), `gateway status` clean, 12 plugins loaded,
+  markers in 2 dist chunks. Cannot be live-reproduced on demand (needs the Max
+  limit to trip) — first real trip is the end-to-end proof. Rollback copy in
+  `~/dist-backups/2026-08-30-pre-session-limit-fix/` — delete once confident.
 - Retire fork patch `c8ddcd77ba2` (Claude CLI natural-OAuth-expiry → auth
   classifier, port of upstream #131345) at the first rebase past #131345.
   Deployed + verified 2026-08-30 17:26: gateway restarted on the new dist,

@@ -4,15 +4,14 @@ Forward-looking ideas, in no particular order. Items here haven't been committed
 
 ## Operational hardening
 
-- **Disable push to `upstream`** so accidental `git push upstream` is impossible (`git remote set-url --push upstream DO_NOT_PUSH`). _(Done 2026-06-09 — update spec when changed.)_
+- **Disable push to `upstream`** — done 2026-06-09 (`git remote set-url --push upstream DO_NOT_PUSH`).
 - **Pre-push hook** that blocks pushes containing `.matt/` paths to any remote other than `origin`. Belt-and-suspenders.
 - **Status-message behavior, source-level:** consider patching the gateway so the post-restart status message workflow is native rather than relying on the BOOT.md convention. Lower-priority since BOOT.md works today.
 
 ## Channel/agent bindings
 
-- Bind additional project channels as projects get deployed locally:
-  - todoist-automation → channel `1507846552843190452` once `~/projects/todoist-automation/` exists.
-  - _(add more as new project channels go live)_
+- Current bindings: `main` (default), `claudedevtools`, `todoistautomations`, `obsidianvaultcleaner`, `openclaw`. See `spec.md` for the full table.
+- _(Add more as new project channels go live.)_
 
 ## Source-level patches worth considering
 
@@ -31,3 +30,8 @@ Forward-looking ideas, in no particular order. Items here haven't been committed
 
 - Fill in `status.md` and this `roadmap.md` over time as the fork evolves.
 - Add per-project specs in `.matt/docs/` for projects that grow large enough to warrant them.
+- Fold remaining config surfaces into `spec.md`: `auth.profiles`, Discord channel-adapter config (guild/account/token source), provider/model defaults, memory provider (openai embeddings), and per-agent `tools.profile` values.
+
+## Memory
+
+- Build the openclaw memory search index per workspace (`openclaw memory status --index --agent <id>`) so cross-session semantic recall actually works. Current state: `Dirty: yes` on both `main` and `claudedevtools`; unbuilt on the new project agents.

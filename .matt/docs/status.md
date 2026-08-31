@@ -17,6 +17,19 @@ wired up / open.
 
 **Next:**
 
+- Retire fork patch `c8ddcd77ba2` (Claude CLI natural-OAuth-expiry → auth
+  classifier, port of upstream #131345) at the first rebase past #131345.
+  Deployed + verified 2026-08-30 17:26: gateway restarted on the new dist,
+  status clean, marker in `dist/errors-*.js`. Rollback copy in
+  `~/dist-backups/2026-08-30-pre-oauth-expiry-fix/` — delete once confident.
+- Investigate pre-existing `[model-catalog] Failed to load model catalog:
+Cannot find module '../../../dist/extensions/deepinfra/provider-policy-api.js'`
+  logged at every gateway start since the 2026-08-12 upgrade (dist has no
+  `extensions/deepinfra/`). Model routing works regardless; unclear what the
+  catalog load feeds. Predates and is unrelated to `c8ddcd77ba2`.
+- Auth expiry went unnoticed for 3.5 days (2026-08-27 → 08-30) because only
+  heartbeats were failing. Consider a heartbeat/cron auth check that pings
+  #server-management when `claude auth status` reports logged out.
 - Checkpoint the sections below: they were last verified 2026-07-30
   against openclaw 2026.6.2, before the 2026-08-12 upgrade to 2026.7.1-2
   and the model rebinding (Fable 5 defaults + Opus 5 pins). Patch list,

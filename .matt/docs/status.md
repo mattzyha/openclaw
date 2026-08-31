@@ -30,17 +30,39 @@ wired up / open.
   Deployed + verified 2026-08-30 17:26: gateway restarted on the new dist,
   status clean, marker in `dist/errors-*.js`. Rollback copy in
   `~/dist-backups/2026-08-30-pre-oauth-expiry-fix/` — delete once confident.
-- Investigate pre-existing `[model-catalog] Failed to load model catalog:
-Cannot find module '../../../dist/extensions/deepinfra/provider-policy-api.js'`
-  logged at every gateway start since the 2026-08-12 upgrade (dist has no
-  `extensions/deepinfra/`). Model routing works regardless; unclear what the
-  catalog load feeds. Predates and is unrelated to `c8ddcd77ba2`.
-  Likely the same root as: `openclaw models list` crashes with `Cannot read
-  properties of undefined (reading 'input')` in the anthropic plugin's
-  `applyAnthropicSonnet5Cost` (`extensions/anthropic/register.runtime.ts`) —
-  a sonnet-5 row resolves without `cost`. Reproduced identically on the
-  pre-deploy dist copy on 2026-08-30, so also pre-existing. `models status`,
-  routing, and the gateway are unaffected.
+- Port upstream `740e7687e84` (#102186, 2026-07-09, not in v2026.7.1-2):
+  `openclaw models list` crashes with `Cannot read properties of undefined
+(reading 'input')` in `applyAnthropicSonnet5Cost`
+  (`extensions/anthropic/register.runtime.ts:587`) because a configured
+  Sonnet-5 row arrives without `cost`; upstream guards it with
+  `modelCostsEqual(current | undefined, expected)` in
+  `src/plugin-sdk/provider-model-shared.ts` (+ same guard in
+  `extensions/anthropic-vertex/provider-catalog.ts`). Pre-existing since the
+  2026-08-12 upgrade; still reproduces 2026-08-30 21:12 on the current dist.
+  CLI-only — `models status`, routing, and the gateway are unaffected. Small
+  port (8 lines each in two files + the helper); Matt to decide.
+- ~~Model-catalog boot warning (`Cannot find module
+'../../../dist/extensions/deepinfra/provider-policy-api.js'`)~~ — CLOSED
+  2026-08-30 (absent at the 20:48 and 21:02 boots, each running 10+ min and
+  each rebuilding `agent_model_catalogs` successfully at 20:48:47 / 21:02:53).
+  What is known: deepinfra is an external official plugin — present in the
+  source tree (`extensions/deepinfra`, 150 dirs) but excluded from `dist/`
+  (97) and `dist-runtime/` (96); the error string is a dangling overlay
+  symlink target, i.e. a `dist-runtime` entry left over from the 2026-08-12
+  build while `dist/` had moved on — which is why both trees now rsync together
+  (spec TL;DR, `.matt/scripts/deploy.sh` + import-target assertion). What is
+  NOT pinned down: the live overlay has been unchanged since 17:24 yet the
+  warning still fired at the 17:26 / 18:33 / 19:03 boots and on the 18:28 /
+  19:02 Hindsight config hot-reloads; the only changes in the 19:04→20:48
+  window were Hindsight config edits (`plugins.slots.memory`,
+  `agents.defaults.heartbeat.every`) and another session's 20:47
+  `openclaw-restart-compact` job. If it comes back, start at
+  `src/plugins/provider-public-artifacts.ts` (checks `dist/extensions` then
+  `dist-runtime/extensions`) and note the plugin index (regenerated 18:28,
+  `source-changed`) lists deepinfra with `rootDir` in the _source_ tree.
+  Oddity from the same window: mtimes of ~40 tracked root files in the live
+  checkout (tsconfig\*, openclaw.mjs, README, pnpm-lock…) changed 19:04→20:48
+  with no reflog entry and `git status` clean — content is fine, cause unknown.
 - Auth expiry went unnoticed for 3.5 days (2026-08-27 → 08-30) because only
   heartbeats were failing. Consider a heartbeat/cron auth check that pings
   #server-management when `claude auth status` reports logged out.
@@ -57,6 +79,7 @@ Cannot find module '../../../dist/extensions/deepinfra/provider-policy-api.js'`
 - Fork running on `~/projects/openclaw` (branch `main`, openclaw 2026.6.2 `b1bdc29`).
 - Build worktree at `~/projects/openclaw-build` — `pnpm install` complete, builds succeed (~5.4 min).
 - Live dist at `~/projects/openclaw/dist` serving the gateway via systemd drop-in.
+- Live runtime overlay at `~/projects/openclaw/dist-runtime` (added to the deploy flow 2026-08-30); `.matt/scripts/deploy.sh` is the scripted build→rsync-both→assert→restart path (dry-run self-test passed 2026-08-30).
 - Four custom patches landed, committed, and deployed: sticky-❌ (`98fa5aefa7`), inline-await reaction cleanup (`703cc6540c`), Claude CLI auth-failure surfacing (`4c19adaa06`), auth-failure detection loosening for `reason=unknown` credential-expiry (`9ff5a3b69e`, deployed 2026-07-30, verified end-to-end via `claude auth logout` on this box — gateway posted the re-auth message and ❌ landed on the test Discord ping, `claude auth login` restored normal ✅ replies).
 - Bundled-hooks loader on (`hooks.internal.enabled: true`). boot-md confirmed firing on restart and posting back-online to the channel from `RESTART_REASON.md`.
 - CLI backend watchdog raised to 600s for both fresh + resume sessions.

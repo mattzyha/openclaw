@@ -232,3 +232,21 @@ describe("HTTP 429 overload wording (#98101)", () => {
     ).toBe("⚠️ rate limit: service overloaded, try again in 30 seconds");
   });
 });
+
+describe("Claude CLI OAuth session expiry (fork port of upstream #131345)", () => {
+  const expiredMessage = "Failed to authenticate: OAuth session expired and could not be refreshed";
+  const loggedOutMessage = "Not logged in · Please run /login";
+
+  it("classifies natural OAuth expiry as auth only for claude-cli", () => {
+    expect(classifyFailoverReason(expiredMessage, { provider: "claude-cli" })).toBe("auth");
+    // Other CLIs keep resumable-session recovery for "session expired" wording.
+    expect(classifyFailoverReason(expiredMessage, { provider: "custom-cli" })).toBe(
+      "session_expired",
+    );
+    expect(classifyFailoverReason(expiredMessage)).toBe("session_expired");
+  });
+
+  it("classifies explicit logout text as auth for claude-cli", () => {
+    expect(classifyFailoverReason(loggedOutMessage, { provider: "claude-cli" })).toBe("auth");
+  });
+});

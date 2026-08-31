@@ -1037,6 +1037,16 @@ function classifyFailoverClassificationFromMessage(
   if (isImageSizeError(raw)) {
     return null;
   }
+  // Fork port of upstream #131345 (468054f93c4): Claude CLI's natural OAuth
+  // expiry text contains "session expired", which the generic CLI
+  // session-not-found matcher below would otherwise claim as
+  // reason=session_expired. That reason never reaches the re-auth copy and
+  // is silenced in group channels, so the user sees nothing. Classify it as
+  // auth first, gated on the claude-cli provider so other CLIs keep their
+  // resumable-session recovery. Retire when rebased past #131345.
+  if (isClaudeCliAuthError(raw, provider)) {
+    return toReasonClassification("auth");
+  }
   if (isCliSessionExpiredErrorMessage(raw)) {
     return toReasonClassification("session_expired");
   }
@@ -1775,6 +1785,18 @@ export function isAuthAssistantError(msg: AssistantMessage | undefined): boolean
     return false;
   }
   return isAuthErrorMessage(msg.errorMessage ?? "");
+}
+
+export function isClaudeCliAuthError(raw: string, provider?: string): boolean {
+  // These Claude CLI phrases overlap generic session/auth wording. Provider
+  // identity must come from runner metadata so other CLIs cannot inherit
+  // Claude policy. Mirrors upstream classification-rules.ts (#131345).
+  if (normalizeOptionalLowercaseString(provider)?.trim() !== "claude-cli") {
+    return false;
+  }
+  return /\bnot logged in\b\s*·\s*please run \/login\b|\bfailed to authenticate:\s*oauth session expired and could not be refreshed\b/i.test(
+    raw,
+  );
 }
 
 function isCliSessionExpiredErrorMessage(raw: string): boolean {

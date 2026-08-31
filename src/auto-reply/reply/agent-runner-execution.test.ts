@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OAuthRefreshFailureError } from "../../agents/auth-profiles/oauth-refresh-failure.js";
 import { testing as cliBackendsTesting } from "../../agents/cli-backends.js";
 import { formatBillingErrorMessage } from "../../agents/embedded-agent-helpers.js";
-import { FailoverError } from "../../agents/failover-error.js";
+import { classifyFailoverReason } from "../../agents/embedded-agent-helpers/errors.js";
+import { FailoverError, resolveFailoverStatus } from "../../agents/failover-error.js";
 import { LiveSessionModelSwitchError } from "../../agents/live-model-switch-error.js";
 import { MissingProviderAuthError } from "../../agents/model-auth.js";
 import { createAgentRunRestartAbortError } from "../../agents/run-termination.js";
@@ -7941,6 +7942,43 @@ describe("runAgentTurnWithFallback", () => {
       expect(result.payload.text).toBe(
         "⚠️ Model login expired on the gateway for anthropic. Re-auth with `openclaw models auth login --provider anthropic`, then try again.",
       );
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+    }
+  });
+
+  it("surfaces re-auth guidance in a Discord channel for Claude CLI natural OAuth expiry (fork port of #131345)", async () => {
+    // Live failure 2026-08-27..30: a naturally expired Claude CLI OAuth token
+    // (as opposed to an explicit `claude auth logout`) makes the CLI emit
+    // "Failed to authenticate: OAuth session expired and could not be
+    // refreshed". Before the classifier port, "session expired" matched the
+    // generic CLI session-not-found rule (reason=session_expired), no auth
+    // classifier fired, and the generic runner failure was silenced in
+    // group/channel contexts — the user saw nothing. Build the error exactly
+    // like the CLI runner does (classify + derived status) so this test is
+    // coupled to the classifier, not to a hand-picked reason.
+    const message = "Failed to authenticate: OAuth session expired and could not be refreshed";
+    const reason = classifyFailoverReason(message, { provider: "claude-cli" }) ?? "unknown";
+    expect(reason).toBe("auth");
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError(message, {
+        reason,
+        provider: "claude-cli",
+        model: "claude-fable-5",
+        status: resolveFailoverStatus(reason),
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(
+      createMinimalRunAgentTurnParams({
+        sessionCtx: createNonDirectFailureSessionCtx(NON_DIRECT_FAILURE_SURFACE_CASES[1]),
+      }),
+    );
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).not.toBe(SILENT_REPLY_TOKEN);
+      expect(result.payload.text).toContain("Model login expired on the gateway for claude-cli");
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
     }
   });

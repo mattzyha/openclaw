@@ -22,9 +22,12 @@ wired up / open.
   ships equivalent handling — check `git grep -i "hit your" upstream/main -- src`
   at each rebase. Deployed + verified 2026-08-30 21:02: gateway restarted on
   the 21:00 dist (pid 284924), `gateway status` clean, 12 plugins loaded,
-  markers in 2 dist chunks. Cannot be live-reproduced on demand (needs the Max
-  limit to trip) — first real trip is the end-to-end proof. Rollback copy in
-  `~/dist-backups/2026-08-30-pre-session-limit-fix/` — delete once confident.
+  markers in 2 dist chunks. **Proven end-to-end 2026-08-30 21:18:** the Max
+  session limit tripped on two turns; journal shows `model fallback decision:
+… reason=rate_limit … detail=You've hit your session limit · resets 1:20am`
+  with no `no queued reply payloads` warning, and Matt confirmed the
+  `You've hit your session limit` message appeared in #openclaw. Rollback copy
+  in `~/dist-backups/2026-08-30-pre-session-limit-fix/` — safe to delete.
 - Retire fork patch `c8ddcd77ba2` (Claude CLI natural-OAuth-expiry → auth
   classifier, port of upstream #131345) at the first rebase past #131345.
   Deployed + verified 2026-08-30 17:26: gateway restarted on the new dist,

@@ -27,6 +27,12 @@ Cannot find module '../../../dist/extensions/deepinfra/provider-policy-api.js'`
   logged at every gateway start since the 2026-08-12 upgrade (dist has no
   `extensions/deepinfra/`). Model routing works regardless; unclear what the
   catalog load feeds. Predates and is unrelated to `c8ddcd77ba2`.
+  Likely the same root as: `openclaw models list` crashes with `Cannot read
+  properties of undefined (reading 'input')` in the anthropic plugin's
+  `applyAnthropicSonnet5Cost` (`extensions/anthropic/register.runtime.ts`) —
+  a sonnet-5 row resolves without `cost`. Reproduced identically on the
+  pre-deploy dist copy on 2026-08-30, so also pre-existing. `models status`,
+  routing, and the gateway are unaffected.
 - Auth expiry went unnoticed for 3.5 days (2026-08-27 → 08-30) because only
   heartbeats were failing. Consider a heartbeat/cron auth check that pings
   #server-management when `claude auth status` reports logged out.

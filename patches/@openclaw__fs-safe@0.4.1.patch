@@ -70,3 +70,47 @@ index 77d0ddfa5a1df2de0449c806d19781daaed4910b..09dd77aef95659865b93ce29e15f26e8
          await handle.close().catch(() => undefined);
          handle = undefined;
          await withAsyncDirectoryGuards([parentGuard], async () => {
+diff --git a/dist/replace-file.js b/dist/replace-file.js
+index 81cc63607654964f9826f7f3016976fa7a5d3f29..5d6a12ca19de99e7269410d323f9a176fa3785b8 100644
+--- a/dist/replace-file.js
++++ b/dist/replace-file.js
+@@ -275,8 +275,14 @@ async function replaceFileAtomicUnserialized(options) {
+     const unregisterTempPath = registerTempPathForExit(tempPath);
+     let tempExists = false;
+     let originalError;
+-    await fsModule.mkdir(dir, { recursive: true, mode: dirMode });
+-    await fsModule.chmod(dir, dirMode).catch(() => undefined);
++    // Recursive mkdir returns the first created path and undefined when the
++    // directory already existed. Only chmod parents this call created:
++    // chmodding pre-existing parents clamps caller-owned directories (e.g.
++    // project roots) to dirMode, stripping setgid bits and group access.
++    const createdDir = await fsModule.mkdir(dir, { recursive: true, mode: dirMode });
++    if (createdDir !== undefined) {
++        await fsModule.chmod(dir, dirMode).catch(() => undefined);
++    }
+     try {
+         tempExists = true;
+         await fsModule.writeFile(tempPath, options.content, { mode, flag: "wx" });
+@@ -329,12 +335,16 @@ export function replaceFileAtomicSync(options) {
+     const unregisterTempPath = registerTempPathForExit(tempPath);
+     let tempExists = false;
+     let originalError;
+-    fsModule.mkdirSync(dir, { recursive: true, mode: dirMode });
+-    try {
+-        fsModule.chmodSync(dir, dirMode);
+-    }
+-    catch {
+-        // Best-effort on platforms that do not enforce POSIX modes.
++    // Same created-dir guard as the async variant: never chmod a parent
++    // directory that already existed before this call.
++    const createdDir = fsModule.mkdirSync(dir, { recursive: true, mode: dirMode });
++    if (createdDir !== undefined) {
++        try {
++            fsModule.chmodSync(dir, dirMode);
++        }
++        catch {
++            // Best-effort on platforms that do not enforce POSIX modes.
++        }
+     }
+     try {
+         tempExists = true;

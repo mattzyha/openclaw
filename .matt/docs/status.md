@@ -31,7 +31,7 @@ wired up / open.
 
 **Next:**
 
-- **Agent-definition stale-capture — FIXED (`d026286af48`), deploy pending with this train.** Was: reply
+- **Agent-definition stale-capture — FIXED (`d026286af48`), deployed 13:21 + validated live 13:34 2026-09-29 (canary cwd = configured workspace, zero restarts).** Was: reply
   dispatch threads the Discord-captured cfg as a complete configOverride
   (`message-handler.process.ts` → `dispatchInboundMessageWithBufferedDispatcher`
   → `dispatch-from-config.ts` `withFullRuntimeReplyConfig`;
@@ -42,7 +42,7 @@ wired up / open.
   one runtime snapshot pinned per turn, Discord dispatch call sites omit the
   captured cfg. Green-lit by Matt in #openclaw 2026-09-29. Tests: dispatcher
   hot-apply regression, discord monitor 855/855, reply 2918, four tsgo lanes.
-  Live re-validation (canary agent with custom workspace) after deploy.
+  Live re-validation passed 2026-09-29 13:34.
 
 - Retire fork patch `c1de8eebf9c` (Claude CLI subscription-limit "You've hit
   your … limit" → rate_limit + verbatim `⚠️` copy in channels) if/when upstream

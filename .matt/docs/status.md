@@ -31,18 +31,18 @@ wired up / open.
 
 **Next:**
 
-- **Fix agent-definition stale-capture (found by 2026-09-29 canary):** reply
+- **Agent-definition stale-capture — FIXED (`d026286af48`), deploy pending with this train.** Was: reply
   dispatch threads the Discord-captured cfg as a complete configOverride
   (`message-handler.process.ts` → `dispatchInboundMessageWithBufferedDispatcher`
   → `dispatch-from-config.ts` `withFullRuntimeReplyConfig`;
   `resolveGetReplyConfig` prefers it, `get-reply-fast-path.ts:117`), so
   workspace/per-agent settings resolve against boot-time config — a hot-added
   agent routes correctly but runs in `agents.defaults.workspace/<id>` until
-  restart. Blueprint: mirror `d9946c42dc5` — stop passing captured cfg from the
-  Discord dispatch call sites (keep configOverride as the test seam) so
-  dispatch resolves against `getRuntimeConfig()`. Needs Matt's design
-  green-light; wider blast radius than the routing patch (typing/ack/groupPolicy
-  reads move to per-message snapshot too — semantically better, more surfaces).
+  restart. Fix mirrors `d9946c42dc5`: dispatcher + turn-kernel cfg optional,
+  one runtime snapshot pinned per turn, Discord dispatch call sites omit the
+  captured cfg. Green-lit by Matt in #openclaw 2026-09-29. Tests: dispatcher
+  hot-apply regression, discord monitor 855/855, reply 2918, four tsgo lanes.
+  Live re-validation (canary agent with custom workspace) after deploy.
 
 - Retire fork patch `c1de8eebf9c` (Claude CLI subscription-limit "You've hit
   your … limit" → rate_limit + verbatim `⚠️` copy in channels) if/when upstream

@@ -9,7 +9,19 @@ wired up / open.
 
 **In flight:**
 
-- (nothing)
+- **Hot-apply agent bindings — built + tested, deploy pending.** Matt
+  green-lit implementation in #openclaw 2026-09-29 (Discord-only first).
+  `d9946c42dc5`: `ResolveAgentRouteInput.cfg` optional → omitted callers
+  resolve against the live runtime snapshot; Discord route call sites
+  (preflight, native commands, components, reactions, voice) stop passing
+  the startup-captured cfg. Tests: hot-apply regression + discord monitor
+  855/855 + routing 58/58; tsgo src/test lanes clean. Deploy = rsync both
+  trees + one final gateway restart (candidate to bundle with the hindsight
+  cutover restart). Deferred follow-ups: feishu/telegram/slack call-site
+  sweep (same capture pattern; feishu confirmed upstream #133757), and
+  configured-binding resolution (`resolveConfiguredBindingRoute`) still
+  reads startup-captured cfg — session-target binding edits still want a
+  restart until that lands. Full context in spec.md patch list.
 
 **Blocked on:**
 
@@ -17,44 +29,6 @@ wired up / open.
 
 **Next:**
 
-- **[design discussion — no code yet]** Make agent binding changes hot-apply
-  (kill the restart-per-binding ritual). Logged 2026-09-29 from the main
-  agent's investigation; Matt to continue design in #openclaw.
-  - Live-confirmed bug (2026-09-29): `config.patch` of a new binding
-    (calibreadmin) was detected by the reload plan (bindings =
-    dynamic/"none"), but routing kept sending the channel to `main` until a
-    gateway restart at 11:26 PDT.
-  - Root cause: the Discord monitor captures cfg once at startup
-    (`extensions/discord/src/monitor/provider.ts` ~185,
-    `opts.config ?? getRuntimeConfig()`) and threads that object through
-    `createDiscordMessageHandler` → `resolveAgentRoute`. The in-process
-    runtime snapshot IS refreshed on config.patch (`config/mutate.ts` +
-    `io.ts` → `finalizeRuntimeSnapshotWrite` → `setRuntimeConfigSnapshot`),
-    so post-patch `loadConfig()` is fresh — the stale part is only the
-    plugin's captured reference. `resolve-route.ts`'s bindings cache is
-    reference-keyed, so it faithfully caches the stale object.
-  - Upstream has NOT fixed it: PRs #47138, #7747, #138007 all closed
-    unmerged (#47138 closed for PR-queue management, not on merits);
-    upstream main still has the identical capture at provider.ts:88.
-    Related issues: #18773, #133757 (same bug in feishu), #138381 (open
-    feature request).
-  - Blueprint: closed upstream PR openclaw/openclaw#47138 — core is +22/−9
-    in `src/routing/resolve-route.ts` (make `cfg` optional on
-    `ResolveAgentRouteInput`, prefer caller snapshot, else fall back to
-    `loadConfig()`). Its +1,785 diffstat is ~95% regenerated docs-baseline
-    JSON; ignore that.
-  - Proposed fork scope: (1) adapt the resolve-route hunk, (2) update
-    Discord routing call sites (message-handler.preflight path,
-    `listeners.reactions.ts:490`, possibly `voice/manager.ts`) to omit the
-    captured cfg so the fallback kicks in, (3) tests. Similar magnitude to
-    the fs-safe patch. One final gateway restart to deploy, then bindings
-    hot-apply forever.
-  - Open questions for the discussion: include other channel plugins'
-    call sites (telegram/slack/etc. likely share the capture pattern) or
-    Discord-only first? Fresh-read-per-resolve vs. cache-invalidation on
-    snapshot swap (perf on hot path vs. simplicity)? And does the
-    reference-keyed bindings cache need a key change, or does dropping the
-    captured cfg make it moot?
 - Retire fork patch `c1de8eebf9c` (Claude CLI subscription-limit "You've hit
   your … limit" → rate_limit + verbatim `⚠️` copy in channels) if/when upstream
   ships equivalent handling — check `git grep -i "hit your" upstream/main -- src`

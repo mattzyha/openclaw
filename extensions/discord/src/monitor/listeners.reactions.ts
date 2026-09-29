@@ -487,8 +487,9 @@ async function handleDiscordReactionEvent(
     };
     const emitReaction = (text: string, parentPeerId?: string) => {
       const { contextKey } = resolveReactionBase();
+      // No cfg: resolve against the live runtime config so binding changes
+      // hot-apply (params.cfg is captured at monitor startup).
       const route = resolveAgentRoute({
-        cfg: params.cfg,
         channel: "discord",
         accountId: params.accountId,
         guildId: data.guild_id ?? undefined,

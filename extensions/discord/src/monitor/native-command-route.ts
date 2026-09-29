@@ -40,8 +40,10 @@ export async function resolveDiscordNativeInteractionRouteState(params: {
   threadBinding?: ThreadBindingRecord;
   enforceConfiguredBindingReadiness?: boolean;
 }): Promise<DiscordNativeInteractionRouteState> {
+  // No cfg: route against the live runtime config so binding changes hot-apply
+  // (params.cfg stays startup-captured and is still used for configured-binding
+  // resolution below).
   const route = resolveDiscordBoundConversationRoute({
-    cfg: params.cfg,
     accountId: params.accountId,
     guildId: params.guildId,
     memberRoleIds: params.memberRoleIds,

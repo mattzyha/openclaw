@@ -37,8 +37,9 @@ export function resolveAgentComponentRoute(params: {
   channelId: string;
   parentId: string | undefined;
 }) {
+  // No cfg: resolve against the live runtime config so binding changes
+  // hot-apply (ctx.cfg is captured at monitor startup).
   return resolveAgentRoute({
-    cfg: params.ctx.cfg,
     channel: "discord",
     accountId: params.ctx.accountId,
     guildId: params.rawGuildId,

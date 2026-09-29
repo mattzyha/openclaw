@@ -1,6 +1,10 @@
 // Route resolution tests cover resolving channel route targets from input.
 import { describe, expect, test, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
+import {
+  clearRuntimeConfigSnapshot,
+  setRuntimeConfigSnapshot,
+} from "../config/runtime-snapshot.js";
 import * as routingBindings from "./bindings.js";
 import {
   deriveLastRoutePolicy,
@@ -1275,5 +1279,53 @@ describe("binding evaluation cache scalability", () => {
     });
     expect(defaultRoute.agentId).toBe("main");
     expect(defaultRoute.matchedBy).toBe("default");
+  });
+});
+
+describe("hot-apply: omitted cfg resolves against the runtime snapshot", () => {
+  test("route reflects runtime snapshot swaps without re-passing cfg (#47138 fork port)", () => {
+    const agents = { list: [{ id: "alpha" }, { id: "beta" }] };
+    const cfgA: OpenClawConfig = {
+      agents,
+      bindings: [
+        {
+          agentId: "alpha",
+          match: { channel: "discord", accountId: "default", peer: { kind: "channel", id: "c-1" } },
+        },
+      ],
+    };
+    const cfgB: OpenClawConfig = {
+      agents,
+      bindings: [
+        {
+          agentId: "beta",
+          match: { channel: "discord", accountId: "default", peer: { kind: "channel", id: "c-1" } },
+        },
+      ],
+    };
+    setRuntimeConfigSnapshot(cfgA);
+    try {
+      const before = resolveAgentRoute({
+        channel: "discord",
+        accountId: "default",
+        peer: { kind: "channel", id: "c-1" },
+      });
+      expect(before.agentId).toBe("alpha");
+      expect(before.matchedBy).toBe("binding.peer");
+
+      // Simulate a config.patch: the runtime snapshot is swapped in place.
+      // The next resolve must see the new binding without any caller change —
+      // this is the stale-captured-cfg regression the fork patch fixes.
+      setRuntimeConfigSnapshot(cfgB);
+      const after = resolveAgentRoute({
+        channel: "discord",
+        accountId: "default",
+        peer: { kind: "channel", id: "c-1" },
+      });
+      expect(after.agentId).toBe("beta");
+      expect(after.matchedBy).toBe("binding.peer");
+    } finally {
+      clearRuntimeConfigSnapshot();
+    }
   });
 });

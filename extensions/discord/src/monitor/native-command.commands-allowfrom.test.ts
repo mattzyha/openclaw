@@ -5,6 +5,7 @@ import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import type { DiscordAccountConfig } from "openclaw/plugin-sdk/config-contracts";
 import * as pluginCommandsModule from "openclaw/plugin-sdk/plugin-runtime";
 import * as dispatcherModule from "openclaw/plugin-sdk/reply-dispatch-runtime";
+import { setRuntimeConfigSnapshot } from "openclaw/plugin-sdk/runtime-config-snapshot";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defineThrowingDiscordChannelGetter } from "../test-support/partial-channel.js";
 import { testing as nativeCommandTesting, createDiscordNativeCommand } from "./native-command.js";
@@ -53,6 +54,9 @@ function createConfig(): OpenClawConfig {
 }
 
 function createCommand(cfg: OpenClawConfig, discordConfig?: DiscordAccountConfig) {
+  // Route resolution reads the live runtime config snapshot (hot-apply fork
+  // patch), so pin the fixture as the snapshot too.
+  setRuntimeConfigSnapshot(cfg);
   const commandSpec: NativeCommandSpec = {
     name: "ping",
     description: "Ping",

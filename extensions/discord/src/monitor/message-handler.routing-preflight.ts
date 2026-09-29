@@ -25,8 +25,10 @@ export async function resolveDiscordPreflightRoute(params: {
   earlyThreadParentId?: string;
 }) {
   const conversationRuntime = await loadConversationRuntime();
+  // No cfg: resolveAgentRoute falls back to the live runtime config snapshot,
+  // so binding changes hot-apply. preflight.cfg is startup-captured and stale
+  // after config.patch (see resolve-route.ts ResolveAgentRouteInput.cfg).
   const route = resolveDiscordConversationRoute({
-    cfg: params.preflight.cfg,
     accountId: params.preflight.accountId,
     guildId: params.preflight.data.guild_id ?? undefined,
     memberRoleIds: params.memberRoleIds,

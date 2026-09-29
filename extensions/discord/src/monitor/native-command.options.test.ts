@@ -71,6 +71,9 @@ function createNativeCommand(
             discord: discordConfig,
           },
         };
+  // Route resolution reads the live runtime config snapshot (hot-apply fork
+  // patch), so pin the fixture as the snapshot too.
+  setRuntimeConfigSnapshot(cfg);
   return createDiscordNativeCommand({
     command,
     cfg,
@@ -196,6 +199,7 @@ async function resolveAutocompleteAuthorized(params: {
   username?: string;
   globalName?: string;
 }) {
+  setRuntimeConfigSnapshot(params.cfg);
   return await resolveDiscordNativeAutocompleteAuthorized({
     cfg: params.cfg,
     discordConfig: params.cfg.channels?.discord ?? {},

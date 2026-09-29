@@ -216,15 +216,15 @@ function resolveVoiceConnectionGroup(accountId: string): string {
   return `openclaw:${accountId}`;
 }
 
+// Routes resolve against the live runtime config (no cfg passed) so binding
+// changes hot-apply; the monitor-captured cfg stays out of route resolution.
 function resolveDiscordVoiceAgentRoute(params: {
-  cfg: OpenClawConfig;
   accountId: string;
   guildId: string;
   sessionChannelId: string;
   voiceConfig: DiscordAccountConfig["voice"];
 }) {
   const voiceRoute = resolveAgentRoute({
-    cfg: params.cfg,
     channel: "discord",
     accountId: params.accountId,
     guildId: params.guildId,
@@ -248,7 +248,6 @@ function resolveDiscordVoiceAgentRoute(params: {
     throw new Error(`Invalid Discord voice agent session target "${target}"`);
   }
   const route = resolveAgentRoute({
-    cfg: params.cfg,
     channel: "discord",
     accountId: params.accountId,
     guildId: params.guildId,
@@ -642,7 +641,6 @@ export class DiscordVoiceManager {
     let routeInfo: ReturnType<typeof resolveDiscordVoiceAgentRoute>;
     try {
       routeInfo = resolveDiscordVoiceAgentRoute({
-        cfg: this.params.cfg,
         accountId: this.params.accountId,
         guildId,
         sessionChannelId,

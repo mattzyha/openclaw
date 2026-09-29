@@ -27,7 +27,8 @@ export function buildDiscordRoutePeer(params: {
 }
 
 export function resolveDiscordConversationRoute(params: {
-  cfg: OpenClawConfig;
+  /** Test-injection seam; production callers omit so routing tracks the live runtime config (hot-apply). */
+  cfg?: OpenClawConfig;
   accountId?: string | null;
   guildId?: string | null;
   memberRoleIds?: string[];
@@ -48,7 +49,8 @@ export function resolveDiscordConversationRoute(params: {
 }
 
 export function resolveDiscordBoundConversationRoute(params: {
-  cfg: OpenClawConfig;
+  /** Test-injection seam; production callers omit so routing tracks the live runtime config (hot-apply). */
+  cfg?: OpenClawConfig;
   accountId?: string | null;
   guildId?: string | null;
   memberRoleIds?: string[];

@@ -3,6 +3,7 @@ import { normalizeLowercaseStringOrEmpty } from "@openclaw/normalization-core/st
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import type { ChatType } from "../channels/chat-type.js";
 import { normalizeChatType } from "../channels/chat-type.js";
+import { getRuntimeConfig } from "../config/io.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { shouldLogVerbose } from "../globals.js";
 import { logDebug } from "../logger.js";
@@ -32,7 +33,14 @@ export type RoutePeer = {
 };
 
 export type ResolveAgentRouteInput = {
-  cfg: OpenClawConfig;
+  /**
+   * Config to resolve against. Omit to use the current runtime config
+   * snapshot, so binding/agent changes hot-apply without a restart.
+   * Long-lived callers (channel monitors) should omit this rather than
+   * thread a startup-captured config: the route caches below are keyed by
+   * config object identity, so a stale captured reference pins stale routes.
+   */
+  cfg?: OpenClawConfig;
   channel: string;
   accountId?: string | null;
   peer?: RoutePeer | null;
@@ -612,6 +620,11 @@ function matchesBindingScope(match: NormalizedBindingMatch, scope: BindingScope)
 }
 
 export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentRoute {
+  // getRuntimeConfig() returns the pinned in-process snapshot (loading it on
+  // first use only), and config writes swap that snapshot — so omitting cfg
+  // yields fresh bindings per call while keeping identity-keyed caches valid
+  // between config writes.
+  const cfg = input.cfg ?? getRuntimeConfig();
   const channel = normalizeToken(input.channel);
   const accountId = normalizeAccountId(input.accountId);
   const peer = input.peer
@@ -624,8 +637,8 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
   const teamId = normalizeId(input.teamId);
   const memberRoleIds = input.memberRoleIds ?? [];
   const memberRoleIdSet = new Set(memberRoleIds);
-  const dmScope = input.cfg.session?.dmScope ?? "main";
-  const identityLinks = input.cfg.session?.identityLinks;
+  const dmScope = cfg.session?.dmScope ?? "main";
+  const identityLinks = cfg.session?.identityLinks;
   const shouldLogDebug = shouldLogVerbose();
   const parentPeer = input.parentPeer
     ? {
@@ -634,8 +647,7 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
       }
     : null;
 
-  const routeCache =
-    !shouldLogDebug && !identityLinks ? resolveRouteCacheForConfig(input.cfg) : null;
+  const routeCache = !shouldLogDebug && !identityLinks ? resolveRouteCacheForConfig(cfg) : null;
   const routeCacheKey = routeCache
     ? buildResolvedRouteCacheKey({
         channel,
@@ -655,19 +667,19 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
     }
   }
 
-  const bindings = getEvaluatedBindingsForChannelAccount(input.cfg, channel, accountId);
-  const bindingsIndex = getEvaluatedBindingIndexForChannelAccount(input.cfg, channel, accountId);
+  const bindings = getEvaluatedBindingsForChannelAccount(cfg, channel, accountId);
+  const bindingsIndex = getEvaluatedBindingIndexForChannelAccount(cfg, channel, accountId);
 
   const choose = (
     agentId: string,
     matchedBy: ResolvedAgentRoute["matchedBy"],
     sessionOverride?: { dmScope?: Parameters<typeof buildAgentSessionKey>[0]["dmScope"] },
   ) => {
-    const resolvedAgentId = pickFirstExistingAgentId(input.cfg, agentId);
+    const resolvedAgentId = pickFirstExistingAgentId(cfg, agentId);
     const effectiveDmScope = sessionOverride?.dmScope ?? dmScope;
     const sessionKey = buildAgentSessionKey({
       agentId: resolvedAgentId,
-      mainKey: input.cfg.session?.mainKey,
+      mainKey: cfg.session?.mainKey,
       channel,
       accountId,
       peer,
@@ -677,7 +689,7 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
     const mainSessionKey = normalizeLowercaseStringOrEmpty(
       buildAgentMainSessionKey({
         agentId: resolvedAgentId,
-        mainKey: input.cfg.session?.mainKey,
+        mainKey: cfg.session?.mainKey,
       }),
     );
     const route = {
@@ -819,5 +831,5 @@ export function resolveAgentRoute(input: ResolveAgentRouteInput): ResolvedAgentR
     }
   }
 
-  return choose(resolveDefaultAgentId(input.cfg), "default");
+  return choose(resolveDefaultAgentId(cfg), "default");
 }

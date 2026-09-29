@@ -1,5 +1,6 @@
 // Discord helper module supports message handler.preflight helpers behavior.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
+import { setRuntimeConfigSnapshot } from "openclaw/plugin-sdk/runtime-config-snapshot";
 import { ChannelType } from "../internal/discord.js";
 import type { preflightDiscordMessage } from "./message-handler.preflight.js";
 import { createNoopThreadBindingManager } from "./thread-bindings.js";
@@ -91,6 +92,10 @@ export function createDiscordPreflightArgs(params: {
   client: DiscordClient;
   botUserId?: string;
 }): Parameters<typeof preflightDiscordMessage>[0] {
+  // Route resolution reads the live runtime config snapshot (hot-apply fork
+  // patch), not the threaded cfg, so pin the fixture as the snapshot too.
+  // Vitest isolates module state per test file, so this cannot leak across files.
+  setRuntimeConfigSnapshot(params.cfg);
   return {
     cfg: params.cfg,
     discordConfig: params.discordConfig,

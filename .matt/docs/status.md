@@ -9,15 +9,17 @@ wired up / open.
 
 **In flight:**
 
-- **Hot-apply agent bindings — built + tested, deploy pending.** Matt
+- **Hot-apply agent bindings — DEPLOYED + validated live 2026-09-29.** Matt
   green-lit implementation in #openclaw 2026-09-29 (Discord-only first).
   `d9946c42dc5`: `ResolveAgentRouteInput.cfg` optional → omitted callers
   resolve against the live runtime snapshot; Discord route call sites
   (preflight, native commands, components, reactions, voice) stop passing
   the startup-captured cfg. Tests: hot-apply regression + discord monitor
-  855/855 + routing 58/58; tsgo src/test lanes clean. Deploy = rsync both
-  trees + one final gateway restart (candidate to bundle with the hindsight
-  cutover restart). Deferred follow-ups: feishu/telegram/slack call-site
+  855/855 + routing 58/58; tsgo src/test lanes clean. Deployed 2026-09-29 12:30 via `.matt/scripts/deploy.sh` (`fd2fe4ebf75`,
+  backup `~/dist-backups/2026-09-29-1229-pre-fd2fe4ebf75`), restart 12:31.
+  Validated live: #calibre-admin rebound to a canary agent and back with
+  `openclaw config patch`, zero restarts — route followed both edits on the
+  next message. Move to a Done note at next checkpoint. Deferred follow-ups: feishu/telegram/slack call-site
   sweep (same capture pattern; feishu confirmed upstream #133757), and
   configured-binding resolution (`resolveConfiguredBindingRoute`) still
   reads startup-captured cfg — session-target binding edits still want a
@@ -28,6 +30,19 @@ wired up / open.
 - (nothing)
 
 **Next:**
+
+- **Fix agent-definition stale-capture (found by 2026-09-29 canary):** reply
+  dispatch threads the Discord-captured cfg as a complete configOverride
+  (`message-handler.process.ts` → `dispatchInboundMessageWithBufferedDispatcher`
+  → `dispatch-from-config.ts` `withFullRuntimeReplyConfig`;
+  `resolveGetReplyConfig` prefers it, `get-reply-fast-path.ts:117`), so
+  workspace/per-agent settings resolve against boot-time config — a hot-added
+  agent routes correctly but runs in `agents.defaults.workspace/<id>` until
+  restart. Blueprint: mirror `d9946c42dc5` — stop passing captured cfg from the
+  Discord dispatch call sites (keep configOverride as the test seam) so
+  dispatch resolves against `getRuntimeConfig()`. Needs Matt's design
+  green-light; wider blast radius than the routing patch (typing/ack/groupPolicy
+  reads move to per-message snapshot too — semantically better, more surfaces).
 
 - Retire fork patch `c1de8eebf9c` (Claude CLI subscription-limit "You've hit
   your … limit" → rate_limit + verbatim `⚠️` copy in channels) if/when upstream

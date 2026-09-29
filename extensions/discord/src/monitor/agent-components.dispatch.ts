@@ -270,7 +270,7 @@ export async function dispatchDiscordComponentEvent(params: {
         raw: interaction,
       }),
       resolveTurn: () => ({
-        cfg: ctx.cfg,
+        // cfg omitted: turn kernel pins the live runtime snapshot (hot-apply).
         channel: "discord",
         accountId,
         agentId,

@@ -54,7 +54,7 @@ export async function dispatchDiscordNativeAgentReply(params: {
   let didReply = false;
   const dispatchResult = await nativeCommandRuntime.dispatchReplyWithDispatcher({
     ctx: params.ctxPayload,
-    cfg: params.cfg,
+    // cfg omitted: dispatcher resolves the live runtime snapshot (hot-apply).
     dispatcherOptions: {
       ...replyPipeline,
       humanDelay: resolveHumanDelayConfig(params.cfg, params.effectiveRoute.agentId),

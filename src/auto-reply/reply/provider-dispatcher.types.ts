@@ -15,7 +15,14 @@ type DispatchReplyOptions = Omit<GetReplyOptions, "onBlockReply">;
 /** Buffered block dispatcher entry point used by provider reply flows. */
 export type DispatchReplyWithBufferedBlockDispatcher = (params: {
   ctx: DispatchReplyContext;
-  cfg: OpenClawConfig;
+  /**
+   * Config to dispatch against. Omit to use the current runtime config
+   * snapshot so agent-definition changes (workspace, per-agent settings)
+   * hot-apply without a restart. Long-lived channel monitors should omit
+   * this rather than thread a startup-captured config; explicit cfg stays
+   * as a test-injection seam.
+   */
+  cfg?: OpenClawConfig;
   dispatcherOptions: ReplyDispatcherWithTypingOptions;
   toolsAllow?: string[];
   replyOptions?: DispatchReplyOptions;
@@ -25,7 +32,8 @@ export type DispatchReplyWithBufferedBlockDispatcher = (params: {
 /** Plain dispatcher entry point used when block buffering is not needed. */
 export type DispatchReplyWithDispatcher = (params: {
   ctx: DispatchReplyContext;
-  cfg: OpenClawConfig;
+  /** See DispatchReplyWithBufferedBlockDispatcher.cfg: omit for runtime snapshot. */
+  cfg?: OpenClawConfig;
   dispatcherOptions: ReplyDispatcherOptions;
   toolsAllow?: string[];
   replyOptions?: DispatchReplyOptions;

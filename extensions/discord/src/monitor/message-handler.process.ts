@@ -1047,7 +1047,9 @@ async function processDiscordMessageInner(
       return;
     }
     const preparedResult = await dispatchChannelInboundReply({
-      cfg,
+      // cfg omitted: dispatch pins the live runtime snapshot per turn so
+      // agent definitions (workspace, per-agent settings) hot-apply; the
+      // startup-captured cfg here stays for transport-only reads above.
       channel: "discord",
       accountId: route.accountId,
       agentId: route.agentId,

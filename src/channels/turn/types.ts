@@ -348,7 +348,13 @@ export type ChannelTurnReplyPipelineOptions = Omit<
 
 /** Fully assembled channel turn ready to build the dispatch runner. */
 export type AssembledChannelTurn = {
-  cfg: OpenClawConfig;
+  /**
+   * Config for this turn. Omit to pin the current runtime config snapshot at
+   * dispatch time, so agent-definition changes hot-apply without a restart.
+   * Long-lived channel monitors should omit this; explicit cfg stays as a
+   * test-injection seam.
+   */
+  cfg?: OpenClawConfig;
   channel: string;
   accountId?: string;
   agentId: string;

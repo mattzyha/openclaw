@@ -1,4 +1,5 @@
 // Dispatch adapters that bridge provider reply resolution into inbound dispatchers.
+import { getRuntimeConfig } from "../../config/io.js";
 import {
   dispatchInboundMessageWithBufferedDispatcher,
   dispatchInboundMessageWithDispatcher,
@@ -18,7 +19,10 @@ export const dispatchReplyWithBufferedBlockDispatcher: DispatchReplyWithBuffered
   async (params) => {
     return await dispatchInboundMessageWithBufferedDispatcher({
       ctx: params.ctx,
-      cfg: params.cfg,
+      // Omitted cfg resolves against the live runtime snapshot so agent
+      // definitions hot-apply; a startup-captured cfg here would pin
+      // workspace/per-agent reads until restart (fork #47138 follow-up).
+      cfg: params.cfg ?? getRuntimeConfig(),
       dispatcherOptions: params.dispatcherOptions,
       toolsAllow: params.toolsAllow,
       replyResolver: params.replyResolver,
@@ -30,7 +34,7 @@ export const dispatchReplyWithBufferedBlockDispatcher: DispatchReplyWithBuffered
 export const dispatchReplyWithDispatcher: DispatchReplyWithDispatcher = async (params) => {
   return await dispatchInboundMessageWithDispatcher({
     ctx: params.ctx,
-    cfg: params.cfg,
+    cfg: params.cfg ?? getRuntimeConfig(),
     dispatcherOptions: params.dispatcherOptions,
     toolsAllow: params.toolsAllow,
     replyResolver: params.replyResolver,

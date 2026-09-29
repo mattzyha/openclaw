@@ -1,10 +1,12 @@
-// Channel turn kernel for normalized inbound event dispatch, history, and delivery.
 import type { ReplyPayload } from "../../auto-reply/reply-payload.js";
 import {
   clearHistoryEntriesIfEnabled,
   recordPendingHistoryEntryWithMedia,
 } from "../../auto-reply/reply/history.js";
 import type { FinalizedMsgContext } from "../../auto-reply/templating.js";
+// Channel turn kernel for normalized inbound event dispatch, history, and delivery.
+import { getRuntimeConfig } from "../../config/io.js";
+import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import {
   createDiagnosticTraceContextFromActiveScope,
   runWithDiagnosticTraceContext,
@@ -240,6 +242,7 @@ export const recordDroppedChannelInboundHistory = recordDroppedChannelTurnHistor
 
 function resolveAssembledReplyPipeline(
   params: AssembledChannelTurn,
+  cfg: OpenClawConfig,
 ): Pick<AssembledChannelTurn, "dispatcherOptions" | "replyOptions"> {
   const onTurnAdopted = params.onTurnAdopted ?? params.replyOptions?.onTurnAdopted;
   if (!params.replyPipeline) {
@@ -249,7 +252,7 @@ function resolveAssembledReplyPipeline(
     };
   }
   const { onModelSelected, ...replyPipeline } = createChannelReplyPipeline({
-    cfg: params.cfg,
+    cfg,
     agentId: params.agentId,
     channel: params.channel,
     accountId: params.accountId,
@@ -415,7 +418,12 @@ export function dispatchAssembledChannelTurn(
 export async function dispatchAssembledChannelTurn(
   params: AssembledChannelTurn,
 ): Promise<ChannelTurnResult> {
-  const replyPipeline = resolveAssembledReplyPipeline(params);
+  // Pin one config per turn: omitted cfg resolves the live runtime snapshot
+  // here (agent definitions hot-apply, fork #47138 follow-up), and every
+  // read below shares it so a mid-turn config write cannot split the turn
+  // across two config generations.
+  const cfg = params.cfg ?? getRuntimeConfig();
+  const replyPipeline = resolveAssembledReplyPipeline(params, cfg);
   return await runPreparedChannelTurnCore(
     {
       channel: params.channel,
@@ -434,7 +442,7 @@ export async function dispatchAssembledChannelTurn(
       runDispatch: async () =>
         await params.dispatchReplyWithBufferedBlockDispatcher({
           ctx: params.ctxPayload,
-          cfg: params.cfg,
+          cfg,
           dispatcherOptions: {
             ...replyPipeline.dispatcherOptions,
             deliver: async (payload: ReplyPayload, info) => {
@@ -447,7 +455,7 @@ export async function dispatchAssembledChannelTurn(
                   : params.delivery.durable;
               if (durableOptions) {
                 const durable = await deliverInboundReplyWithMessageSendContext({
-                  cfg: params.cfg,
+                  cfg,
                   channel: params.channel,
                   accountId: params.accountId,
                   agentId: params.agentId,

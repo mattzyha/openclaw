@@ -127,6 +127,10 @@ function installRuntime(params: {
   );
   type ResolvedTurn = Parameters<PluginRuntime["channel"]["inbound"]["dispatchReply"]>[0];
   const dispatchAssembled = vi.fn(async (turn: ResolvedTurn) => {
+    if (!turn.cfg) {
+      // This stub mirrors the pre-hot-apply kernel; zalouser still passes cfg.
+      throw new Error("test turn requires cfg");
+    }
     await turn.recordInboundSession({
       storePath: turn.storePath,
       sessionKey: turn.ctxPayload.SessionKey ?? turn.routeSessionKey,

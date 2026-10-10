@@ -74,6 +74,28 @@ describe("bootstrap-extra-files hook", () => {
     );
   });
 
+  it("appends operator-trusted absolute paths from outside the workspace", async () => {
+    const tempDir = await makeTempWorkspace("openclaw-bootstrap-extra-abs-");
+    const sharedDir = await makeTempWorkspace("openclaw-bootstrap-extra-shared-");
+    const sharedFile = path.join(sharedDir, "AGENTS.md");
+    await fs.writeFile(sharedFile, "global agents", "utf-8");
+
+    const cfg = createBootstrapExtraConfig([sharedFile]);
+    const context = await createBootstrapContext({
+      workspaceDir: tempDir,
+      cfg,
+      sessionKey: "agent:main:main",
+      rootFiles: [{ name: "AGENTS.md", content: "root agents" }],
+    });
+
+    const event = createHookEvent("agent", "bootstrap", "agent:main:main", context);
+    await handler(event);
+
+    const injected = context.bootstrapFiles.filter((f) => f.name === "AGENTS.md");
+    expect(injected).toHaveLength(2);
+    expect(injected.map((f) => f.content)).toContain("global agents");
+  });
+
   it("re-applies subagent bootstrap allowlist after extras are added", async () => {
     const tempDir = await makeTempWorkspace("openclaw-bootstrap-extra-subagent-");
     const extraDir = path.join(tempDir, "packages", "persona");

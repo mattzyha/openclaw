@@ -48,6 +48,28 @@ workspace root.
 - `patterns` (string[]): alias of `paths`.
 - `files` (string[]): alias of `paths`.
 
-All paths are resolved from the workspace and must stay inside it (including realpath checks).
-Only recognized bootstrap basenames are loaded (`AGENTS.md`, `SOUL.md`, `TOOLS.md`,
-`IDENTITY.md`, `USER.md`, `HEARTBEAT.md`, `BOOTSTRAP.md`, `MEMORY.md`).
+Relative paths are resolved from the workspace and must stay inside it (including
+realpath checks). Absolute and `~/` paths are operator-trusted — they come from
+`openclaw.json`, so they may point outside the workspace (for example a global
+`AGENTS.md` shared by every agent). They are read literally (no glob expansion),
+keep the per-file size cap, and must be regular files in their configured
+directory — a symlink resolving elsewhere is rejected. Only recognized bootstrap
+basenames are loaded
+(`AGENTS.md`, `SOUL.md`, `TOOLS.md`, `IDENTITY.md`, `USER.md`, `HEARTBEAT.md`,
+`BOOTSTRAP.md`, `MEMORY.md`).
+
+```json
+{
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "bootstrap-extra-files": {
+          "enabled": true,
+          "paths": ["~/.openclaw/shared/AGENTS.md"]
+        }
+      }
+    }
+  }
+}
+```

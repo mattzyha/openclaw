@@ -77,6 +77,10 @@ function workspaceFileIdentity(stat: syncFs.Stats, canonicalPath: string): strin
 async function readWorkspaceFileWithGuards(params: {
   filePath: string;
   workspaceDir: string;
+  // Operator-trusted paths come from openclaw.json (operator-edited, not
+  // agent-writable workspace content), so the workspace containment check does
+  // not apply; the pinned open + size cap below still do.
+  operatorTrusted?: boolean;
 }): Promise<WorkspaceGuardedReadResult> {
   try {
     // A transient FS race (EAGAIN/EWOULDBLOCK/EINTR under load) on the open or
@@ -87,10 +91,15 @@ async function readWorkspaceFileWithGuards(params: {
     // in openRootFile still protects against a swapped file between attempts.
     return await retryAsync(
       async () => {
+        // Operator-trusted paths anchor the boundary at the file's parent
+        // directory instead of the workspace: the pinned open + size cap stay,
+        // and the realpath containment check still rejects a final symlink
+        // pointing elsewhere — trust covers the configured location, not
+        // whatever an agent-writable symlink at that location resolves to.
         const opened = await openRootFile({
           absolutePath: params.filePath,
-          rootPath: params.workspaceDir,
-          boundaryLabel: "workspace root",
+          rootPath: params.operatorTrusted ? path.dirname(params.filePath) : params.workspaceDir,
+          boundaryLabel: params.operatorTrusted ? "operator bootstrap root" : "workspace root",
           maxBytes: MAX_WORKSPACE_BOOTSTRAP_FILE_BYTES,
         });
         if (!opened.ok) {
@@ -1170,6 +1179,12 @@ function hasGlobPattern(pattern: string): boolean {
   return /[?*{}]/u.test(pattern);
 }
 
+function isOperatorPathPattern(pattern: string): boolean {
+  // Match only `~`, `~/`, `~\` prefixes (what expandHomePrefix expands);
+  // `~user/...` stays a workspace-relative literal.
+  return path.isAbsolute(pattern) || /^~(?=$|[\\/])/u.test(pattern);
+}
+
 function normalizeWorkspacePatternPath(value: string): string {
   return value
     .replaceAll(path.sep, "/")
@@ -1267,25 +1282,41 @@ export async function loadExtraBootstrapFilesWithDiagnostics(
   }
   const resolvedDir = resolveUserPath(dir);
 
-  // Resolve glob patterns into concrete file paths
-  const resolvedPaths = new Set<string>();
+  // Resolve glob patterns into concrete file paths. Absolute and ~-prefixed
+  // patterns are operator-trusted (they come from openclaw.json, which only the
+  // operator edits — workspace content cannot inject them), may point outside
+  // the workspace (for example a global AGENTS.md shared by every agent), and
+  // are read literally with no glob expansion; the read still rejects a final
+  // symlink that leaves the configured directory (see readWorkspaceFileWithGuards).
+  // Relative patterns stay workspace-scoped and boundary-guarded: a symlink or
+  // traversal inside the agent-writable workspace must not smuggle outside
+  // content into the prompt.
+  const resolvedPaths = new Map<string, { operatorTrusted: boolean }>();
+  const addResolvedPath = (filePath: string, operatorTrusted: boolean) => {
+    if (!resolvedPaths.has(filePath)) {
+      resolvedPaths.set(filePath, { operatorTrusted });
+    }
+  };
   for (const pattern of extraPatterns) {
+    if (isOperatorPathPattern(pattern)) {
+      addResolvedPath(resolveUserPath(pattern), true);
+      continue;
+    }
     if (hasGlobPattern(pattern)) {
       const matches = await resolveExtraBootstrapPatternPaths(resolvedDir, pattern);
       for (const match of matches) {
-        resolvedPaths.add(match);
+        addResolvedPath(path.resolve(resolvedDir, match), false);
       }
     } else {
-      resolvedPaths.add(pattern);
+      addResolvedPath(path.resolve(resolvedDir, pattern), false);
     }
   }
 
   const files: WorkspaceBootstrapFile[] = [];
   const diagnostics: ExtraBootstrapLoadDiagnostic[] = [];
-  for (const relPath of resolvedPaths) {
-    const filePath = path.resolve(resolvedDir, relPath);
+  for (const [filePath, { operatorTrusted }] of resolvedPaths) {
     // Only load files whose basename is a recognized bootstrap filename
-    const baseName = path.basename(relPath);
+    const baseName = path.basename(filePath);
     if (!VALID_BOOTSTRAP_NAMES.has(baseName)) {
       diagnostics.push({
         path: filePath,
@@ -1297,6 +1328,7 @@ export async function loadExtraBootstrapFilesWithDiagnostics(
     const loaded = await readWorkspaceFileWithGuards({
       filePath,
       workspaceDir: resolvedDir,
+      operatorTrusted,
     });
     if (loaded.ok) {
       files.push({

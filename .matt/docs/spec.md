@@ -10,7 +10,8 @@ For **deployment configuration** (bindings, agents, models turned on, plugins/ho
 edit + commit in ~/projects/openclaw (branch: main)
          │
          ▼
-cd ~/projects/openclaw-build && git fetch && git reset --hard main && pnpm build
+cd ~/projects/openclaw-build && git fetch && git reset --hard main && rm -rf dist dist-runtime \
+  && OPENCLAW_RUN_NODE_SKIP_DTS_BUILD=1 pnpm build:docker && pnpm ui:build   # no-dts deploy build, see Build mechanics
          │
          ▼
 rsync -a --delete ~/projects/openclaw-build/dist/         ~/projects/openclaw/dist/
@@ -54,14 +55,27 @@ Ownership split: **OpenClaw owns the base unit** (let `doctor --repair` / `gatew
 ## Build mechanics + gotchas
 
 - `pnpm install` in the build worktree is near-free — hard-links from the pnpm global store at `~/.local/share/pnpm/store/`. Typical: ~3s, no real download for ~1073 packages.
-- `pnpm build` takes ~5.4 min total (dominated by `tsdown` at ~4 min).
-- Memory peak is ~9.7 GiB on an 11 GiB box — close to OOM. Foreground `pnpm build` invoked from a bash tool call can be killed by the Claude CLI's no-output watchdog (raised to 600s on this gateway) OR by the kernel OOM killer if anything else is hot at the same time.
-- Workaround when running the build via an agent: detach with `systemd-run` so the build survives the calling shell's lifecycle.
+- **Deploy builds skip dts-generation (2026-10-10).** `pnpm build` (full profile) runs tsdown with
+  declaration output; that dts phase alone peaked ~9.7 GiB on this 11 GiB box and on 2026-10-10 the
+  OOM killer took out the gateway's claude-cli session plus the build. The gateway only runs `.js`
+  from `dist/` — `.d.ts` matters for npm publishing, which this box never does. deploy.sh now builds
+  with upstream's own runtime recipe: `OPENCLAW_RUN_NODE_SKIP_DTS_BUILD=1 pnpm build:docker && pnpm
+ui:build` (build:docker = full step chain minus the two plugin-SDK type-artifact steps; ui:build
+  adds the Control UI it omits). Validated 2026-10-10: ~30s, <1 GiB peak, dist file-parity with a
+  full build except `.d.ts`/maps and the `.boundary-entry-shims.stamp` cache marker; no dangling
+  dist-runtime symlinks. deploy.sh also `rm -rf`s the worktree's dist trees pre-build (dist is
+  gitignored, so `git reset` leaves stale artifacts that `rsync --delete` would keep shipping).
+  Memory backstop stays on the build unit regardless: `MemoryHigh=7G` (throttle into swap, don't
+  balloon) + `OOMScoreAdjust=500` (kernel kills the build before the gateway). Raise the 7G cap
+  after the planned RAM upgrade. If type artifacts are ever needed locally, run plain `pnpm build`.
+- Foreground builds invoked from a bash tool call can be killed by the Claude CLI's no-output watchdog (raised to 600s on this gateway); detach with `systemd-run` so the build survives the calling shell's lifecycle (deploy.sh does this, with the memory guards):
   ```bash
   systemd-run --user --unit=openclaw-build \
     --working-directory=/home/minimatt/projects/openclaw-build \
     --setenv=PATH=/home/minimatt/.npm-global/bin:/usr/local/bin:/usr/bin:/bin \
-    -- /home/minimatt/.npm-global/bin/pnpm build
+    --setenv=OPENCLAW_RUN_NODE_SKIP_DTS_BUILD=1 \
+    -p MemoryHigh=7G -p OOMScoreAdjust=500 \
+    -- bash -c '/home/minimatt/.npm-global/bin/pnpm build:docker && /home/minimatt/.npm-global/bin/pnpm ui:build'
   ```
   Then poll with `systemctl --user status openclaw-build` (each poll is sub-second; unit reports `inactive` + result on completion).
 - After build: `ls /home/minimatt/projects/openclaw-build/dist/index.js` should show a fresh timestamp; `du -sh` of the dist will be ~149 MiB / ~5,500 files.

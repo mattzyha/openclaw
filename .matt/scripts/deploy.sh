@@ -18,12 +18,15 @@ PNPM=/home/minimatt/.npm-global/bin/pnpm
 OPENCLAW=/home/minimatt/.npm-global/bin/openclaw
 BACKUP_ROOT=/home/minimatt/dist-backups
 REASON_FILE=/home/minimatt/.openclaw/workspace/RESTART_REASON.md
-# Memory guards (added after the 2026-10-10 OOM kill: tsdown dts-generation peaks 9-10 GB on this
+# Memory guards (added after the 2026-10-10 OOM kill: tsdown dts-generation peaked 9-10 GB on this
 # 11 GB box and the kernel took out the gateway's claude-cli session alongside the build).
 # MemoryHigh throttles the build into swap past the cap instead of ballooning until the OOM killer
 # fires; OOMScoreAdjust makes the build the preferred victim over the gateway if a kill still
-# happens. Throttled builds can take ~35 min (vs ~5 unthrottled), hence the generous poll window.
-# TODO after the planned RAM upgrade: raise BUILD_MEMORY_HIGH (and the timeout can shrink again).
+# happens. The build also skips dts-generation entirely (the dts phase WAS the 9-10 GB peak):
+# `build:docker` is upstream's own runtime-only recipe (full dist minus plugin-SDK type artifacts;
+# Docker runtime images default to OPENCLAW_DOCKER_BUILD_SKIP_DTS=1), plus `ui:build` for the
+# Control UI which build:docker omits. The gateway never reads .d.ts; only npm publishing does.
+# TODO after the planned RAM upgrade: raise BUILD_MEMORY_HIGH (guards stay as backstop).
 BUILD_MEMORY_HIGH=7G
 BUILD_OOM_SCORE_ADJ=500
 BUILD_TIMEOUT=3600
@@ -54,16 +57,20 @@ log "deploying $short ($(git -C "$SRC" log -1 --format=%s "$sha"))"
 # 1. Build in the worktree (detached: survives the caller, avoids the CLI no-output watchdog).
 if [ "$skip_build" = 0 ]; then
   run git -C "$BUILD" reset --hard "$sha" --quiet
+  # dist/ is gitignored, so reset leaves stale artifacts (e.g. .d.ts from old full builds) that
+  # rsync --delete would keep shipping to live. Clean both trees; the no-dts build is fast anyway.
+  run rm -rf "$BUILD/dist" "$BUILD/dist-runtime"
   log "pnpm install --silent in $BUILD (hard-links from the pnpm store; installs no new packages)"
   run "$PNPM" -C "$BUILD" install --silent
   unit="openclaw-build-$(date +%H%M%S)"
   started=$(date +%s)
   run systemd-run --user --unit="$unit" --working-directory="$BUILD" \
     --setenv=PATH=/home/minimatt/.npm-global/bin:/usr/local/bin:/usr/bin:/bin \
+    --setenv=OPENCLAW_RUN_NODE_SKIP_DTS_BUILD=1 \
     -p MemoryHigh="$BUILD_MEMORY_HIGH" -p OOMScoreAdjust="$BUILD_OOM_SCORE_ADJ" \
-    -- "$PNPM" build
+    -- bash -c "$PNPM build:docker && $PNPM ui:build"
   if [ "$dry_run" = 0 ]; then
-    log "build unit $unit running (~5 min free, ~35 min if memory-throttled); polling up to ${BUILD_TIMEOUT}s"
+    log "build unit $unit running (no-dts build, ~5 min); polling up to ${BUILD_TIMEOUT}s"
     timeout "$BUILD_TIMEOUT" bash -c "while systemctl --user is-active --quiet $unit; do sleep 15; done" || {
       echo "build still running after ${BUILD_TIMEOUT}s; check: systemctl --user status $unit" >&2; exit 1; }
     result=$(systemctl --user show "$unit" -p Result --value)

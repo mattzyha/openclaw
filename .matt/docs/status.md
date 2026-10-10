@@ -31,8 +31,10 @@ wired up / open.
   approved): `BUILD_MEMORY_HIGH=7G` + `OOMScoreAdjust=500` on the build
   unit, `BUILD_TIMEOUT=3600` (throttled builds run ~35 min). Walk back the
   7G cap after the planned server RAM upgrade (TODO comment in script).
-  Open option: skip dts-generation for gateway-only deploys (gateway never
-  reads `.d.ts`; would make builds fast/cheap again).
+  dts-skip ALSO done (Matt approved 11:24): deploy builds now use
+  `OPENCLAW_RUN_NODE_SKIP_DTS_BUILD=1 pnpm build:docker && pnpm ui:build`
+  - pre-build dist clean. Validated cold: 30s, <1 GiB peak, file-parity
+    with full build minus `.d.ts`; guards stay as backstop. spec.md updated.
 
 - **Hot-apply agent bindings — DEPLOYED + validated live 2026-09-29.** Matt
   green-lit implementation in #openclaw 2026-09-29 (Discord-only first).

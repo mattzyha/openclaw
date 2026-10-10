@@ -18,7 +18,15 @@ PNPM=/home/minimatt/.npm-global/bin/pnpm
 OPENCLAW=/home/minimatt/.npm-global/bin/openclaw
 BACKUP_ROOT=/home/minimatt/dist-backups
 REASON_FILE=/home/minimatt/.openclaw/workspace/RESTART_REASON.md
-BUILD_TIMEOUT=600
+# Memory guards (added after the 2026-10-10 OOM kill: tsdown dts-generation peaks 9-10 GB on this
+# 11 GB box and the kernel took out the gateway's claude-cli session alongside the build).
+# MemoryHigh throttles the build into swap past the cap instead of ballooning until the OOM killer
+# fires; OOMScoreAdjust makes the build the preferred victim over the gateway if a kill still
+# happens. Throttled builds can take ~35 min (vs ~5 unthrottled), hence the generous poll window.
+# TODO after the planned RAM upgrade: raise BUILD_MEMORY_HIGH (and the timeout can shrink again).
+BUILD_MEMORY_HIGH=7G
+BUILD_OOM_SCORE_ADJ=500
+BUILD_TIMEOUT=3600
 CHANNEL=1509056381460811879   # #openclaw
 
 sha=""; skip_build=0; no_restart=0; dry_run=0; reason=""; markers=()
@@ -52,9 +60,10 @@ if [ "$skip_build" = 0 ]; then
   started=$(date +%s)
   run systemd-run --user --unit="$unit" --working-directory="$BUILD" \
     --setenv=PATH=/home/minimatt/.npm-global/bin:/usr/local/bin:/usr/bin:/bin \
+    -p MemoryHigh="$BUILD_MEMORY_HIGH" -p OOMScoreAdjust="$BUILD_OOM_SCORE_ADJ" \
     -- "$PNPM" build
   if [ "$dry_run" = 0 ]; then
-    log "build unit $unit running (~5 min); polling up to ${BUILD_TIMEOUT}s"
+    log "build unit $unit running (~5 min free, ~35 min if memory-throttled); polling up to ${BUILD_TIMEOUT}s"
     timeout "$BUILD_TIMEOUT" bash -c "while systemctl --user is-active --quiet $unit; do sleep 15; done" || {
       echo "build still running after ${BUILD_TIMEOUT}s; check: systemctl --user status $unit" >&2; exit 1; }
     result=$(systemctl --user show "$unit" -p Result --value)

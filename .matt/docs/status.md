@@ -25,9 +25,14 @@ wired up / open.
   #19), restart 10:47. Validated live 10:49: fresh project-agent bootstrap
   (openclaw agent) shows the shared AGENTS.md layered above the repo one;
   `operator bootstrap root` marker in live dist. All 10
-  `~/projects/*/AGENTS.md` symlinks deleted. Follow-up: bake the two
-  memory guards (+ consider `NODE_OPTIONS=--max-old-space-size`) into
-  `deploy.sh` — building beside the live gateway is a standing OOM hazard.
+  `~/projects/*/AGENTS.md` symlinks deleted. Second-channel validation
+  passed 10:58 (hindsight project agent confirmed shared AGENTS.md + real
+  workspace AGENTS.md). Memory guards baked into `deploy.sh` 11:22 (Matt
+  approved): `BUILD_MEMORY_HIGH=7G` + `OOMScoreAdjust=500` on the build
+  unit, `BUILD_TIMEOUT=3600` (throttled builds run ~35 min). Walk back the
+  7G cap after the planned server RAM upgrade (TODO comment in script).
+  Open option: skip dts-generation for gateway-only deploys (gateway never
+  reads `.d.ts`; would make builds fast/cheap again).
 
 - **Hot-apply agent bindings — DEPLOYED + validated live 2026-09-29.** Matt
   green-lit implementation in #openclaw 2026-09-29 (Discord-only first).

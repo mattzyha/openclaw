@@ -26,10 +26,12 @@ REASON_FILE=/home/minimatt/.openclaw/workspace/RESTART_REASON.md
 # `build:docker` is upstream's own runtime-only recipe (full dist minus plugin-SDK type artifacts;
 # Docker runtime images default to OPENCLAW_DOCKER_BUILD_SKIP_DTS=1), plus `ui:build` for the
 # Control UI which build:docker omits. The gateway never reads .d.ts; only npm publishing does.
-# TODO after the planned RAM upgrade: raise BUILD_MEMORY_HIGH (guards stay as backstop).
+# TODO after the planned RAM upgrade: raise BUILD_MEMORY_HIGH (guards stay as backstop; Todoist
+# task on the Dev Projects board tracks this).
 BUILD_MEMORY_HIGH=7G
 BUILD_OOM_SCORE_ADJ=500
-BUILD_TIMEOUT=3600
+# No-dts builds run ~30s warm / low minutes cold; 600s catches hangs without stalling deploys.
+BUILD_TIMEOUT=600
 CHANNEL=1509056381460811879   # #openclaw
 
 sha=""; skip_build=0; no_restart=0; dry_run=0; reason=""; markers=()

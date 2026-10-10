@@ -9,6 +9,26 @@ wired up / open.
 
 **In flight:**
 
+- **Cascading global AGENTS.md — DEPLOYED + validated live 2026-10-10.**
+  `870b06d1d48` (feat(hooks): operator-trusted absolute paths in
+  bootstrap-extra-files): project agents now get the global house-rules
+  AGENTS.md injected natively instead of via per-project symlinks the
+  workspace-boundary check rejected. Config:
+  `hooks.internal.entries.bootstrap-extra-files.paths =
+["~/.openclaw/shared/AGENTS.md"]` (regular file required — loader rejects
+  symlinks); file created 10:14 as a copy of the workspace AGENTS.md.
+  Rocky deploy: the original work run OOM-killed at 09:54 mid-build (tsdown
+  dts phase ~9-10 GB on the 11 GB box took out the CLI session and the build
+  unit together); retry ran with `MemoryHigh=7G` + `oom_score_adj=500` on
+  the build unit, build finished 10:27, `deploy.sh --skip-build` completed
+  10:46 (backup `~/dist-backups/2026-10-10-1046-pre-870b06d1d48`, Timeshift
+  #19), restart 10:47. Validated live 10:49: fresh project-agent bootstrap
+  (openclaw agent) shows the shared AGENTS.md layered above the repo one;
+  `operator bootstrap root` marker in live dist. All 10
+  `~/projects/*/AGENTS.md` symlinks deleted. Follow-up: bake the two
+  memory guards (+ consider `NODE_OPTIONS=--max-old-space-size`) into
+  `deploy.sh` — building beside the live gateway is a standing OOM hazard.
+
 - **Hot-apply agent bindings — DEPLOYED + validated live 2026-09-29.** Matt
   green-lit implementation in #openclaw 2026-09-29 (Discord-only first).
   `d9946c42dc5`: `ResolveAgentRouteInput.cfg` optional → omitted callers

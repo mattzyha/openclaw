@@ -37,14 +37,14 @@ wired up / open.
     with full build minus `.d.ts`; guards stay as backstop. spec.md updated.
 
 - **Hot-apply agent bindings — DEPLOYED + validated live 2026-09-29.** Matt
-  green-lit implementation in #openclaw 2026-09-29 (Discord-only first).
+  green-lit implementation in `#openclaw` 2026-09-29 (Discord-only first).
   `d9946c42dc5`: `ResolveAgentRouteInput.cfg` optional → omitted callers
   resolve against the live runtime snapshot; Discord route call sites
   (preflight, native commands, components, reactions, voice) stop passing
   the startup-captured cfg. Tests: hot-apply regression + discord monitor
   855/855 + routing 58/58; tsgo src/test lanes clean. Deployed 2026-09-29 12:30 via `.matt/scripts/deploy.sh` (`fd2fe4ebf75`,
   backup `~/dist-backups/2026-09-29-1229-pre-fd2fe4ebf75`), restart 12:31.
-  Validated live: #calibre-admin rebound to a canary agent and back with
+  Validated live: `#calibre-admin` rebound to a canary agent and back with
   `openclaw config patch`, zero restarts — route followed both edits on the
   next message. Move to a Done note at next checkpoint. Deferred follow-ups: feishu/telegram/slack call-site
   sweep (same capture pattern; feishu confirmed upstream #133757), and
@@ -67,7 +67,7 @@ wired up / open.
   agent routes correctly but runs in `agents.defaults.workspace/<id>` until
   restart. Fix mirrors `d9946c42dc5`: dispatcher + turn-kernel cfg optional,
   one runtime snapshot pinned per turn, Discord dispatch call sites omit the
-  captured cfg. Green-lit by Matt in #openclaw 2026-09-29. Tests: dispatcher
+  captured cfg. Green-lit by Matt in `#openclaw` 2026-09-29. Tests: dispatcher
   hot-apply regression, discord monitor 855/855, reply 2918, four tsgo lanes.
   Live re-validation passed 2026-09-29 13:34.
 
@@ -80,7 +80,7 @@ wired up / open.
   session limit tripped on two turns; journal shows `model fallback decision:
 … reason=rate_limit … detail=You've hit your session limit · resets 1:20am`
   with no `no queued reply payloads` warning, and Matt confirmed the
-  `You've hit your session limit` message appeared in #openclaw. Rollback copy
+  `You've hit your session limit` message appeared in `#openclaw`. Rollback copy
   in `~/dist-backups/2026-08-30-pre-session-limit-fix/` — safe to delete.
 - Retire fork patch `c8ddcd77ba2` (Claude CLI natural-OAuth-expiry → auth
   classifier, port of upstream #131345) at the first rebase past #131345.
@@ -122,7 +122,7 @@ wired up / open.
   with no reflog entry and `git status` clean — content is fine, cause unknown.
 - Auth expiry went unnoticed for 3.5 days (2026-08-27 → 08-30) because only
   heartbeats were failing. Consider a heartbeat/cron auth check that pings
-  #server-management when `claude auth status` reports logged out.
+  `#server-management` when `claude auth status` reports logged out.
 - Checkpoint the sections below: they were last verified 2026-07-30
   against openclaw 2026.6.2, before the 2026-08-12 upgrade to 2026.7.1-2
   and the model rebinding (Fable 5 defaults + Opus 5 pins). Patch list,

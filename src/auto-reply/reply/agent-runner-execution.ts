@@ -43,6 +43,7 @@ import {
   isRateLimitErrorMessage,
   isTransientHttpError,
 } from "../../agents/embedded-agent-helpers.js";
+import { SUBSCRIPTION_LIMIT_REACHED_RE } from "../../agents/embedded-agent-helpers/failover-matches.js";
 import { sanitizeUserFacingText } from "../../agents/embedded-agent-helpers/sanitize-user-facing-text.js";
 import { isMessagingToolSendAction } from "../../agents/embedded-agent-messaging.js";
 import { mergeEmbeddedAgentRunResultForModelFallbackExhaustion } from "../../agents/embedded-agent-runner/result-fallback-classifier.js";
@@ -91,6 +92,7 @@ import { CommandLaneClearedError, GatewayDrainingError } from "../../process/com
 import { CommandLane } from "../../process/lanes.js";
 import { defaultRuntime } from "../../runtime.js";
 import { shouldPreserveUserFacingSessionStateForInputProvenance } from "../../sessions/input-provenance.js";
+import { parseApiErrorInfo } from "../../shared/assistant-error-format.js";
 import {
   isMarkdownCapableMessageChannel,
   resolveMessageChannel,
@@ -771,14 +773,14 @@ function extractCodexUsageLimitMessage(text: string): string | undefined {
   return message.length > 500 ? `${truncateUtf16Safe(message, 497)}...` : message;
 }
 
-// Claude CLI subscription-limit text carries the reset time ("You've hit your
-// session limit · resets 8pm (America/Los_Angeles)"); surface it verbatim,
-// mirroring the Codex usage-limit handling above, instead of the generic
-// "temporarily rate-limited" copy that drops the only actionable detail.
-// Fork addition 2026-08-30; the qualifier ("session", "weekly", ...) is
-// composed dynamically by the CLI, so match the family rather than one phrase.
-const CLAUDE_CLI_USAGE_LIMIT_RE = /\byou['’]?ve hit your(?: [a-z0-9-]+){0,3} limit\b/i;
-
+// Claude CLI subscription-limit text carries the actionable detail — the reset
+// time ("You've hit your session limit · resets 8pm (America/Los_Angeles)") or
+// which limit it was ("You've reached your Fable limit. Switch to another
+// model, …"); surface it verbatim, mirroring the Codex usage-limit handling
+// above, instead of the generic "temporarily rate-limited" copy that drops it.
+// Fork addition 2026-08-30. The matcher is the classifier's own
+// (SUBSCRIPTION_LIMIT_REACHED_RE), so any text that classifies as a
+// subscription limit is also the text that gets shown.
 function extractClaudeCliUsageLimitErrorMessage(err: unknown): string | undefined {
   if (isFallbackSummaryError(err)) {
     for (const attempt of err.attempts) {
@@ -794,11 +796,16 @@ function extractClaudeCliUsageLimitErrorMessage(err: unknown): string | undefine
 }
 
 function extractClaudeCliUsageLimitMessage(text: string): string | undefined {
-  const match = CLAUDE_CLI_USAGE_LIMIT_RE.exec(text);
+  // The verb-family matcher also fits API-provider wording ("You have reached
+  // your specified API usage limits. …"), which can arrive inside a JSON error
+  // body. Read the body's message field so the slice below ends with the
+  // sentence, not with trailing payload such as a request id.
+  const source = parseApiErrorInfo(text)?.message ?? text;
+  const match = SUBSCRIPTION_LIMIT_REACHED_RE.exec(source);
   if (!match) {
     return undefined;
   }
-  const message = sanitizeUserFacingText(text.slice(match.index), { errorContext: true })
+  const message = sanitizeUserFacingText(source.slice(match.index), { errorContext: true })
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .filter(Boolean)
@@ -972,7 +979,7 @@ type ExternalRunFailureInput = string | { message: string; error?: unknown };
 
 type ExternalFailureConversationContext = Pick<
   TemplateContext,
-  "ChatType" | "Provider" | "SessionKey" | "Surface"
+  "ChatType" | "InboundEventKind" | "Provider" | "SessionKey" | "Surface"
 >;
 
 function isNonDirectConversationContext(ctx: ExternalFailureConversationContext): boolean {
@@ -994,6 +1001,20 @@ function resolveExternalRunFailureTextForConversation(params: {
     return params.text;
   }
   if (!params.isGenericRunnerFailure && !params.text.includes(AGENT_FAILED_BEFORE_REPLY_TEXT)) {
+    return params.text;
+  }
+  // Fork (OC-3): silence is fine for background activity, never for a question
+  // someone asked. A turn the channel classified as a user request always gets
+  // its failure copy, whatever the group silent-reply policy says — otherwise an
+  // unclassified failure (a reworded provider limit, a crashed CLI) answers a
+  // person with nothing at all. Room events, and turns that carry no event kind
+  // (cron/exec system events, queued turns from callers that do not classify),
+  // keep the policy-driven silence below.
+  // Deliberate trade-off: channels classify unmentioned group traffic as a user
+  // request by default, so in an always-on room every message gets a failure
+  // notice while the failure lasts. Rooms with ambient human chatter opt out by
+  // setting messages.groupChat.unmentionedInbound to "room_event".
+  if (params.sessionCtx.InboundEventKind === "user_request") {
     return params.text;
   }
   // Match normal reply routing: default group/channel failures stay silent,

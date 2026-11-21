@@ -5231,6 +5231,48 @@ describe("createFollowupRunner messaging delivery and dedupe", () => {
     });
   });
 
+  it("routes the terminal failure for a failed user request in a group channel (fork, OC-3)", async () => {
+    // Group/channel failure copy defaults to silence. A queued turn that a
+    // person asked for must still hear that it failed.
+    const exhaustionError = new Error("All model fallback candidates failed");
+    exhaustionError.name = "FallbackSummaryError";
+    runWithModelFallbackMock.mockRejectedValueOnce(exhaustionError);
+    const queued = baseQueuedRun("discord");
+    await runMessagingCase({
+      agentResult: { payloads: [] },
+      queued: {
+        ...queued,
+        currentInboundEventKind: "user_request",
+        originatingChannel: "discord",
+        originatingChatType: "channel",
+        originatingTo: "channel:C1",
+      },
+    });
+
+    expect(requireMockCallArg(routeReplyMock, 0).payload).toMatchObject({
+      text: GENERIC_EXTERNAL_RUN_FAILURE_TEXT,
+      isError: true,
+    });
+  });
+
+  it("keeps the group terminal failure silent when the queued turn carries no event kind", async () => {
+    const exhaustionError = new Error("All model fallback candidates failed");
+    exhaustionError.name = "FallbackSummaryError";
+    runWithModelFallbackMock.mockRejectedValueOnce(exhaustionError);
+    const queued = baseQueuedRun("discord");
+    await runMessagingCase({
+      agentResult: { payloads: [] },
+      queued: {
+        ...queued,
+        originatingChannel: "discord",
+        originatingChatType: "channel",
+        originatingTo: "channel:C1",
+      },
+    });
+
+    expect(routeReplyMock).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       "NO_REPLY",

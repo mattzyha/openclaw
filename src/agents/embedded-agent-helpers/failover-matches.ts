@@ -8,6 +8,23 @@ type ErrorPattern = RegExp | string;
 const PERIODIC_USAGE_LIMIT_RE =
   /\b(?:daily|weekly|monthly)(?:\/(?:daily|weekly|monthly))* (?:usage )?limit(?:s)?(?: (?:exhausted|reached|exceeded))?\b/i;
 
+// Claude CLI subscription limits compose both the verb and the qualifier
+// dynamically: "You've hit your session limit · resets 8pm (America/Los_Angeles)"
+// (2026-08-30) became "You've reached your Fable limit. Switch to another
+// model, …" (2026-10-31). Fork addition: match the verb family plus up to five
+// qualifier words instead of one phrase. The single-phrase matcher missed the
+// reworded text, the failure classified as unknown, and the generic failure
+// copy was silenced in group channels (OC-3).
+// A qualifier word may not end in sentence punctuation, so the match cannot run
+// from one sentence into an unrelated "limit" in the next ("Opus 5.5" is fine:
+// the dot is inside the word). "context" is excluded so an overflow error is
+// never taken for a subscription limit — isLikelyContextOverflowError consults
+// the rate-limit matcher before its own heuristics.
+// The reply runner imports this to surface the matched text verbatim; keep one
+// definition so the classifier and the user-facing copy cannot drift apart.
+export const SUBSCRIPTION_LIMIT_REACHED_RE =
+  /\byou(?:['’]?ve| have)?\s+(?:hit|reached|exceeded|used up)\s+your\s+(?:(?!context\b)\S*[^\s.!?:;,]\s+){0,5}?limits?\b/i;
+
 const HIGH_CONFIDENCE_AUTH_PERMANENT_PATTERNS = [
   /api[_ ]?key[_ ]?(?:revoked|deactivated|deleted)/i,
   /deactivated[_ ]workspace/i,
@@ -82,12 +99,11 @@ const ERROR_PATTERNS = {
     "throttled",
     "throttling",
     "usage limit",
-    // Claude CLI subscription limits compose the qualifier dynamically
-    // ("session", "weekly", "fast", "monthly", or none): "You've hit your
-    // session limit · resets 8pm (America/Los_Angeles)". Fork addition
-    // (2026-08-30): without this the text classified as unknown and the
-    // generic failure copy was silenced in group channels.
-    /\byou['’]?ve hit your(?: [a-z0-9-]+){0,3} limit\b/i,
+    // Claude CLI subscription limits ("You've hit your session limit · resets
+    // 8pm", "You've reached your Fable limit. …"). Fork addition (2026-08-30,
+    // widened 2026-11-21): without this the text classified as unknown and
+    // the generic failure copy was silenced in group channels.
+    SUBSCRIPTION_LIMIT_REACHED_RE,
     /\btpm\b/i,
     "tokens per minute",
     "tokens per day",

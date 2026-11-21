@@ -32,6 +32,7 @@ import {
   isOverloadedErrorMessage,
   isRateLimitErrorMessage,
   isTimeoutErrorMessage,
+  SUBSCRIPTION_LIMIT_REACHED_RE,
 } from "./failover-matches.js";
 
 /** Format the billing failure copy with optional provider/model context.
@@ -106,7 +107,13 @@ function extractProviderRateLimitMessage(raw: string): string | undefined {
   const candidate =
     info?.message ?? (extractLeadingHttpStatus(withoutPrefix)?.rest || withoutPrefix);
 
-  if (!candidate || !RATE_LIMIT_SPECIFIC_HINT_RE.test(candidate)) {
+  // Fork (OC-3): a subscription-limit sentence ("You've reached your Fable
+  // limit. Switch to another model, …") names the limit and the way out, so it
+  // is worth keeping even when it carries no reset time or other hint word.
+  if (
+    !candidate ||
+    !(RATE_LIMIT_SPECIFIC_HINT_RE.test(candidate) || SUBSCRIPTION_LIMIT_REACHED_RE.test(candidate))
+  ) {
     return undefined;
   }
 

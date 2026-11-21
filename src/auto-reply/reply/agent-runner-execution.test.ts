@@ -712,6 +712,37 @@ describe("buildEmptyInteractiveReplyPayload", () => {
       }),
     ).toMatchObject({ text: EMPTY_INTERACTIVE_REPLY_TEXT, isError: true });
   });
+
+  it("surfaces the fallback for a user request under the default silent policy (fork, OC-3)", () => {
+    expect(
+      buildEmptyInteractiveReplyPayload({
+        ...baseParams,
+        sessionCtx: { ...baseParams.sessionCtx, InboundEventKind: "user_request" },
+      }),
+    ).toMatchObject({ text: EMPTY_INTERACTIVE_REPLY_TEXT, isError: true });
+  });
+
+  it("stays silent for a room event under the default silent policy (fork, OC-3)", () => {
+    const payload = buildEmptyInteractiveReplyPayload({
+      ...baseParams,
+      sessionCtx: { ...baseParams.sessionCtx, InboundEventKind: "room_event" },
+    });
+
+    expect(payload?.text).toBe(SILENT_REPLY_TOKEN);
+  });
+
+  it("still treats an empty reply as silent when the group policy allows it", () => {
+    // In group chats under the default policy the runner sets
+    // allowEmptyAssistantReplyAsSilent, so a model that simply chose not to
+    // answer never reaches the failure copy — only real failures do.
+    expect(
+      buildEmptyInteractiveReplyPayload({
+        ...baseParams,
+        allowEmptyAssistantReplyAsSilent: true,
+        sessionCtx: { ...baseParams.sessionCtx, InboundEventKind: "user_request" },
+      }),
+    ).toBeUndefined();
+  });
 });
 
 describe("buildContextOverflowRecoveryText", () => {
@@ -6999,6 +7030,59 @@ describe("runAgentTurnWithFallback", () => {
     },
   );
 
+  it.each(NON_DIRECT_FAILURE_SURFACE_CASES)(
+    "surfaces generic failure copy for a user request in $label chats (fork, OC-3)",
+    async (testCase) => {
+      // Silence is fine for background activity, never for a question someone
+      // asked: an unclassified failure on a user-initiated turn must not
+      // answer a person with nothing, even under the default silent policy.
+      state.runEmbeddedAgentMock.mockRejectedValueOnce(
+        new Error("openai/gpt-5.5 ended with an incomplete terminal response"),
+      );
+
+      const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+      const result = await runAgentTurnWithFallback(
+        createMinimalRunAgentTurnParams({
+          sessionCtx: {
+            ...createNonDirectFailureSessionCtx(testCase),
+            InboundEventKind: "user_request",
+          },
+        }),
+      );
+
+      expect(result.kind).toBe("final");
+      if (result.kind === "final") {
+        expect(result.payload.text).toBe(GENERIC_RUN_FAILURE_TEXT);
+        expect(result.payload.isError).toBe(true);
+        expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+      }
+    },
+  );
+
+  it.each(NON_DIRECT_FAILURE_SURFACE_CASES)(
+    "keeps generic failure copy silent for a passive room event in $label chats (fork, OC-3)",
+    async (testCase) => {
+      state.runEmbeddedAgentMock.mockRejectedValueOnce(
+        new Error("openai/gpt-5.5 ended with an incomplete terminal response"),
+      );
+
+      const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+      const result = await runAgentTurnWithFallback(
+        createMinimalRunAgentTurnParams({
+          sessionCtx: {
+            ...createNonDirectFailureSessionCtx(testCase),
+            InboundEventKind: "room_event",
+          },
+        }),
+      );
+
+      expect(result.kind).toBe("final");
+      if (result.kind === "final") {
+        expect(result.payload.text).toBe(SILENT_REPLY_TOKEN);
+      }
+    },
+  );
+
   it.each(["group", "channel"] as const)(
     "surfaces raw runner failure copy in Discord %s chats when silentReply.group is set to disallow",
     async (chatType) => {
@@ -8014,6 +8098,66 @@ describe("runAgentTurnWithFallback", () => {
     if (result.kind === "final") {
       expect(result.payload.text).toBe(`⚠️ ${message}`);
       expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+    }
+  });
+
+  it("surfaces the reworded Claude CLI limit text verbatim in a Discord channel (fork, OC-3)", async () => {
+    // Live failure 2026-10-31: Anthropic reworded the limit text from "hit" to
+    // "reached" and dropped the reset time. The single-phrase matcher missed
+    // it, the turn classified as unknown, and the generic copy was silenced in
+    // channels. Text is verbatim from the gateway journal. Built like the CLI
+    // runner builds it, so the test is coupled to the classifier and to the
+    // verbatim extractor at once: if the two ever disagree, this gets generic
+    // "rate-limited" copy instead of the provider sentence.
+    const message =
+      "You've reached your Fable limit. Switch to another model, or manage usage credits at https://claude.ai/settings/usage?from=cc_cli_limit_message, to continue.";
+    const reason = classifyFailoverReason(message, { provider: "claude-cli" }) ?? "unknown";
+    expect(reason).toBe("rate_limit");
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new FailoverError(message, {
+        reason,
+        provider: "claude-cli",
+        model: "claude-fable-5-2",
+        status: resolveFailoverStatus(reason),
+      }),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(
+      createMinimalRunAgentTurnParams({
+        sessionCtx: createNonDirectFailureSessionCtx(NON_DIRECT_FAILURE_SURFACE_CASES[1]),
+      }),
+    );
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(`⚠️ ${message}`);
+      expect(isReplyPayloadRunTerminalErrorSurface(result.payload)).toBe(true);
+    }
+  });
+
+  it("surfaces only the limit sentence when it arrives inside a JSON error body (fork, OC-3)", async () => {
+    // The verb-family matcher also fits API-provider wording. Sliced from the
+    // raw string, the copy would carry the closing braces and the request id.
+    const sentence =
+      "You have reached your specified API usage limits. You will regain access on 2026-12-01 at 00:00 UTC.";
+    state.runEmbeddedAgentMock.mockRejectedValueOnce(
+      new Error(
+        `400 ${JSON.stringify({
+          type: "error",
+          error: { type: "invalid_request_error", message: sentence },
+          request_id: "req_011CSHoEeqs5C35K2UUqR7Fy",
+        })}`,
+      ),
+    );
+
+    const runAgentTurnWithFallback = await getRunAgentTurnWithFallback();
+    const result = await runAgentTurnWithFallback(createMinimalRunAgentTurnParams());
+
+    expect(result.kind).toBe("final");
+    if (result.kind === "final") {
+      expect(result.payload.text).toBe(`⚠️ ${sentence}`);
+      expect(result.payload.text).not.toContain("request_id");
     }
   });
 

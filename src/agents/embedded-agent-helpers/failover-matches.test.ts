@@ -8,6 +8,7 @@ import {
   isRateLimitErrorMessage,
   isServerErrorMessage,
   isTimeoutErrorMessage,
+  SUBSCRIPTION_LIMIT_REACHED_RE,
 } from "./failover-matches.js";
 import { formatRateLimitOrOverloadedErrorCopy } from "./sanitize-user-facing-text.js";
 
@@ -269,5 +270,64 @@ describe("Claude CLI subscription limit text (fork, 2026-08-30)", () => {
 
   it("preserves the reset detail in user-facing rate-limit copy", () => {
     expect(formatRateLimitOrOverloadedErrorCopy(sessionLimit)).toBe(`⚠️ ${sessionLimit}`);
+  });
+});
+
+describe("Claude CLI subscription limit wording family (fork, OC-3)", () => {
+  // Verbatim from the gateway journal, 2026-10-31 onward. Anthropic reworded
+  // the limit text from "hit" to "reached" and dropped the reset time; the
+  // single-phrase matcher missed it and the turn classified as unknown.
+  const fableLimit =
+    "You've reached your Fable limit. Switch to another model, or manage usage credits at https://claude.ai/settings/usage?from=cc_cli_limit_message, to continue.";
+
+  it("classifies the reworded 'reached your … limit' text as rate_limit", () => {
+    expect(classifyFailoverReason(fableLimit)).toBe("rate_limit");
+    expect(classifyFailoverReason(fableLimit, { provider: "claude-cli" })).toBe("rate_limit");
+    expect(isBillingErrorMessage(fableLimit)).toBe(false);
+  });
+
+  it.each([
+    "You've reached your Fable limit.",
+    "You’ve reached your weekly limit · resets Dec 2, 3am",
+    "You have exceeded your session limit",
+    "You've used up your Opus 5.5 weekly limit",
+    "You reached your limit",
+    "You hit your limits for this week",
+    "Youve hit your session limit",
+  ])("matches the verb family: %s", (text) => {
+    expect(isRateLimitErrorMessage(text)).toBe(true);
+    expect(classifyFailoverReason(text)).toBe("rate_limit");
+  });
+
+  it("keeps the earlier 'hit your … limit' wording classified", () => {
+    expect(
+      classifyFailoverReason("You've hit your session limit · resets 8pm (America/Los_Angeles)"),
+    ).toBe("rate_limit");
+  });
+
+  it("keeps spend limits classified as billing whatever the verb", () => {
+    expect(classifyFailoverReason("You've reached your monthly spend limit.")).toBe("billing");
+    expect(classifyFailoverReason("You have exceeded your spending limit")).toBe("billing");
+  });
+
+  it.each([
+    // The qualifier may not cross a sentence boundary into an unrelated "limit".
+    "You've reached your destination. There is no limit on retries.",
+    "You have hit your stride, and there is no limit to it",
+    // More than five qualifier words is prose, not a limit notice.
+    "You've reached your one two three four five six limit",
+    // Context overflow must never read as a subscription limit.
+    "You have exceeded your context window limit",
+    "You've exceeded your model's context limit",
+    // No "your … limit" object at all.
+    "You've reached the end of the file",
+  ])("does not match unrelated text: %s", (text) => {
+    expect(SUBSCRIPTION_LIMIT_REACHED_RE.test(text)).toBe(false);
+  });
+
+  it("surfaces the provider sentence in user-facing copy even without a reset time", () => {
+    // The mid-turn copy path used to fall back to the generic "API rate limit
+    // reached" line unless the text carried a hint word such as "resets".
+    expect(formatRateLimitOrOverloadedErrorCopy(fableLimit)).toBe(`⚠️ ${fableLimit}`);
   });
 });

@@ -1574,6 +1574,9 @@ export function createFollowupRunner(params: {
         (run.inputProvenance?.kind === undefined || run.inputProvenance.kind === "external_user");
       const failureConversationContext = {
         ChatType: queued.originatingChatType,
+        // Fork (OC-3): carry the queued turn's event kind so a failed user
+        // request surfaces its failure copy in group channels too.
+        InboundEventKind: queued.currentInboundEventKind,
         Provider: run.messageProvider,
         SessionKey: replySessionKey,
         Surface: queued.originatingChannel,

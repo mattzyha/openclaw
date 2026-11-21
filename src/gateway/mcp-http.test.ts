@@ -138,6 +138,9 @@ import {
   closeMcpLoopbackServer,
   getActiveMcpLoopbackRuntime,
   ensureMcpLoopbackServer,
+  pinMcpLoopbackServerForHostLifetime,
+  releaseMcpLoopbackServerAfterRun,
+  resetMcpLoopbackHostPinForTest,
   startMcpLoopbackServer,
 } from "./mcp-http.js";
 import {
@@ -1951,6 +1954,31 @@ describe("mcp loopback server", () => {
     expect(getActiveMcpLoopbackRuntime()?.port).toBe(first.port);
 
     await closeMcpLoopbackServer();
+    expect(getActiveMcpLoopbackRuntime()).toBeUndefined();
+  });
+
+  // Fork patch (OC-4): run-end release must not close a host-pinned bridge.
+  it("keeps a host-pinned bridge open across run-end release until shutdown", async () => {
+    try {
+      const first = await ensureMcpLoopbackServer(0);
+      pinMcpLoopbackServerForHostLifetime();
+
+      await expect(releaseMcpLoopbackServerAfterRun()).resolves.toBe(false);
+      expect(getActiveMcpLoopbackRuntime()?.port).toBe(first.port);
+      await expect(ensureMcpLoopbackServer(0)).resolves.toBe(first);
+
+      await closeMcpLoopbackServer();
+      expect(getActiveMcpLoopbackRuntime()).toBeUndefined();
+    } finally {
+      resetMcpLoopbackHostPinForTest();
+      await closeMcpLoopbackServer();
+    }
+  });
+
+  it("closes an unpinned bridge on run-end release", async () => {
+    await ensureMcpLoopbackServer(0);
+
+    await expect(releaseMcpLoopbackServerAfterRun()).resolves.toBe(true);
     expect(getActiveMcpLoopbackRuntime()).toBeUndefined();
   });
 

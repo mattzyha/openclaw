@@ -182,6 +182,14 @@ const getChannelRuntime = createLazyRuntimeModule(() =>
   ),
 );
 
+async function pinMcpLoopbackServerForGatewayLifetime(): Promise<void> {
+  // Fork patch (OC-4): one-shot runs inside the gateway (openclaw agent, isolated
+  // cron, slug hook, probes, non-session subagents) must not close the bridge
+  // live sessions share; shutdown closes it via closeMcpLoopbackServerOnDemand.
+  const { pinMcpLoopbackServerForHostLifetime } = await import("./mcp-http.js");
+  pinMcpLoopbackServerForHostLifetime();
+}
+
 async function closeMcpLoopbackServerOnDemand(): Promise<void> {
   const { closeMcpLoopbackServer } = await import("./mcp-http.js");
   await closeMcpLoopbackServer();
@@ -526,6 +534,7 @@ export async function startGatewayServer(
   opts: GatewayServerOptions = {},
 ): Promise<GatewayServer> {
   normalizeStateDirEnv(process.env);
+  await pinMcpLoopbackServerForGatewayLifetime();
   // runGatewayLoop calls this after closing the previous server on both fresh
   // and in-process restarts, making retired plugin generations safe to remove.
   try {

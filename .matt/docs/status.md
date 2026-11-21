@@ -9,20 +9,27 @@ wired up / open.
 
 **In flight:**
 
-- **OC-3 silent usage-limit failures — BUILT + pushed 2026-11-21, NOT yet
-  deployed (awaiting Matt's go-ahead in `#openclaw`).** `1b775f58429`: one
+- **OC-3 silent usage-limit failures — DEPLOYED 2026-11-21; matcher not yet
+  proven live (needs the plan limit to trip).** `1b775f58429`: one
   shared matcher (`SUBSCRIPTION_LIMIT_REACHED_RE`) covers the Claude CLI
   limit verb family, so the reworded "You've reached your Fable limit. …"
   classifies `rate_limit` and is shown verbatim; and generic failure copy now
   surfaces in group/channel chats when the turn is a user request (room
   events and background turns stay silent). Upstream checked first
   (`104ced5c83e`): not fixed there. Tests, type checks, lint and autoreview
-  clean, all run locally. Deploy with
-  `.matt/scripts/deploy.sh --reason "OC-3 limit matcher + user-request failure surfacing" --marker 'hit|reached|exceeded|used up'`
-  (confirm the marker against the staged chunk). Live proof of the matcher
-  needs the plan limit to trip; watch the journal for
-  `reason=rate_limit … detail=You've reached your Fable limit`. Full context
-  in spec.md patch list. Todoist card OC-3 stays In Progress until deployed.
+  clean, all run locally. Matt approved the deploy in `#openclaw` 09:52.
+  Deployed 09:54 via `deploy.sh --no-restart` (`79b1581a053`, build 30s,
+  backup `~/dist-backups/2026-11-21-0954-pre-79b1581a053`), restart 09:56
+  (pid 845130). Verified 10:00: `gateway status` clean, connectivity probe
+  ok, 12 plugins loaded, no boot errors, both markers in live dist
+  (`dist/sanitize-user-facing-text-*.js`, `dist/agent-runner.runtime-*.js`).
+  The only `Cannot find module` lines are from the outgoing process at
+  shutdown (it lazy-loads chunks the deploy had already replaced — same
+  pattern as the 2026-11-20 deploy), not from the new gateway. Still to
+  observe: the next Fable limit should log
+  `reason=rate_limit … detail=You've reached your Fable limit` instead of
+  `reason=unknown` (none since the restart as of 10:00). Full context in
+  spec.md patch list.
 
 - **OC-4 shared MCP bridge teardown — DEPLOYED + validated live 2026-11-20.**
   Took upstream's fix instead of a fork patch: cherry-pick `6e3c6c466c9` of
@@ -82,14 +89,14 @@ wired up / open.
 
 **Blocked on:**
 
-- OC-3 deploy: needs Matt's go-ahead (build + gateway restart).
-- Stale upstream ref + leftover fetch debris (found 2026-11-21): a plain
+- Stale upstream ref (found 2026-11-21): a plain
   `git fetch upstream` tries to pull all ~4,800 upstream branches and has
   not completed since 2026-08-30, so `upstream/main` is still `f100107904b`
-  (2026-08-30). Four dead fetches left ~26 GB of `tmp_pack_*` files in
-  `.git/objects/pack/` (2026-09-29, 2026-10-26, two on 2026-11-20); `.git`
-  is 33 GB. Untouched pending Matt's OK to delete. Until the fetch is
-  narrowed, read current upstream from a one-commit tarball
+  (2026-08-30). Four dead fetches had left ~26 GB of `tmp_pack_*` files in
+  `.git/objects/pack/` (2026-09-29, 2026-10-26, two on 2026-11-20); they
+  were deleted 2026-11-21 on Matt's OK and `.git` is now 3.3 GB. Every
+  further plain fetch that dies leaves another one behind. Until the fetch
+  is narrowed, read current upstream from a one-commit tarball
   (`git ls-remote upstream refs/heads/main`, then
   `https://codeload.github.com/openclaw/openclaw/tar.gz/<sha>`), which is how
   the OC-3 upstream check was done.

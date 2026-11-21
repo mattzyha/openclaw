@@ -508,10 +508,8 @@ async function runCliAgentInternal(params: RunCliAgentParams): Promise<EmbeddedA
   }
   if (params.cleanupBundleMcpOnRunEnd === true) {
     try {
-      // Fork patch (OC-4): no-op inside the gateway, which pins the shared
-      // bridge for its lifetime; see pinMcpLoopbackServerForHostLifetime.
-      const { releaseMcpLoopbackServerAfterRun } = await import("../gateway/mcp-http.js");
-      await releaseMcpLoopbackServerAfterRun();
+      const { closeMcpLoopbackServer } = await import("../gateway/mcp-http.js");
+      await closeMcpLoopbackServer();
     } catch (error) {
       recordCleanupError(error);
     }

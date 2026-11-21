@@ -23,7 +23,7 @@ const {
   executePreparedCliRunMock,
   prepareCliRunContextMock,
   closeClaudeLiveSessionForContextMock,
-  releaseMcpLoopbackServerAfterRunMock,
+  closeMcpLoopbackServerMock,
 } = vi.hoisted(() => ({
   hasHooksMock: vi.fn<(hookName: string) => boolean>(() => false),
   runBeforeAgentReplyMock: vi.fn<(event: unknown, ctx: unknown) => Promise<BeforeAgentReplyResult>>(
@@ -34,7 +34,7 @@ const {
   >(async () => ({ text: "" })),
   prepareCliRunContextMock: vi.fn(),
   closeClaudeLiveSessionForContextMock: vi.fn(),
-  releaseMcpLoopbackServerAfterRunMock: vi.fn(),
+  closeMcpLoopbackServerMock: vi.fn(),
 }));
 
 vi.mock("../plugins/hook-runner-global.js", () => ({
@@ -57,7 +57,7 @@ vi.mock("./cli-runner/claude-live-session.js", () => ({
 }));
 
 vi.mock("../gateway/mcp-http.js", () => ({
-  releaseMcpLoopbackServerAfterRun: releaseMcpLoopbackServerAfterRunMock,
+  closeMcpLoopbackServer: closeMcpLoopbackServerMock,
 }));
 
 const baseRunParams = {
@@ -105,7 +105,7 @@ beforeEach(() => {
     makeStubContext(params as typeof baseRunParams & { trigger?: string }),
   );
   closeClaudeLiveSessionForContextMock.mockReset();
-  releaseMcpLoopbackServerAfterRunMock.mockReset();
+  closeMcpLoopbackServerMock.mockReset();
 });
 
 beforeAll(async () => {
@@ -313,7 +313,7 @@ describe("runCliAgent cron before_agent_reply seam", () => {
     await runCliAgent({ ...baseRunParams, cleanupBundleMcpOnRunEnd: true });
 
     expect(executePreparedCliRunMock).toHaveBeenCalledTimes(1);
-    expect(releaseMcpLoopbackServerAfterRunMock).toHaveBeenCalledTimes(1);
+    expect(closeMcpLoopbackServerMock).toHaveBeenCalledTimes(1);
   });
 
   it("preserves confirmed delivery when bundle MCP cleanup fails", async () => {
@@ -321,7 +321,7 @@ describe("runCliAgent cron before_agent_reply seam", () => {
       text: "",
       didSendViaMessagingTool: true,
     });
-    releaseMcpLoopbackServerAfterRunMock.mockRejectedValue(new Error("loopback cleanup failed"));
+    closeMcpLoopbackServerMock.mockRejectedValue(new Error("loopback cleanup failed"));
 
     await expect(
       runCliAgent({ ...baseRunParams, cleanupBundleMcpOnRunEnd: true }),
@@ -332,7 +332,7 @@ describe("runCliAgent cron before_agent_reply seam", () => {
 
   it("surfaces bundle MCP cleanup failures when nothing was delivered", async () => {
     executePreparedCliRunMock.mockResolvedValue({ text: "real reply" });
-    releaseMcpLoopbackServerAfterRunMock.mockRejectedValue(new Error("loopback cleanup failed"));
+    closeMcpLoopbackServerMock.mockRejectedValue(new Error("loopback cleanup failed"));
 
     await expect(runCliAgent({ ...baseRunParams, cleanupBundleMcpOnRunEnd: true })).rejects.toThrow(
       "loopback cleanup failed",

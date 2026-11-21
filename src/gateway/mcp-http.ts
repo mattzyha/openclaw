@@ -415,43 +415,7 @@ export async function ensureMcpLoopbackServer(port = 0): Promise<McpLoopbackServ
   return activeMcpLoopbackServerPromise;
 }
 
-// Fork patch (OC-4): the loopback bridge is a process-wide singleton shared by
-// every CLI-backed run in this process, and its bearer tokens are minted fresh
-// on each start. A one-shot run that closes it on run end (cleanupBundleMcpOnRunEnd)
-// therefore tears tools out from under every live session in a long-lived host
-// (ECONNREFUSED, then 401 once a new bridge binds with new tokens). Long-lived
-// hosts (the gateway) pin the bridge at startup so run-end release is a no-op;
-// only host shutdown closes it, via closeMcpLoopbackServer(). Short-lived
-// processes never pin, so their run-end close still frees the port on exit.
-let mcpLoopbackPinnedForHostLifetime = false;
-
-/** Keeps the loopback bridge open until host shutdown; run-end release becomes a no-op. */
-export function pinMcpLoopbackServerForHostLifetime(): void {
-  mcpLoopbackPinnedForHostLifetime = true;
-}
-
-/** Test-only: clears the host-lifetime pin. */
-export function resetMcpLoopbackHostPinForTest(): void {
-  mcpLoopbackPinnedForHostLifetime = false;
-}
-
-/**
- * Run-end cleanup entry point. Closes the shared bridge only when no
- * long-lived host has pinned it. Returns true when a close was attempted.
- */
-export async function releaseMcpLoopbackServerAfterRun(): Promise<boolean> {
-  if (mcpLoopbackPinnedForHostLifetime) {
-    return false;
-  }
-  await closeMcpLoopbackServer();
-  return true;
-}
-
-/**
- * Closes the active MCP loopback server if one has been started. Ignores the
- * host-lifetime pin: this is the shutdown path. Run-end cleanup must use
- * releaseMcpLoopbackServerAfterRun() instead.
- */
+/** Closes the active MCP loopback server if one has been started. */
 export async function closeMcpLoopbackServer(): Promise<void> {
   const server =
     activeMcpLoopbackServer ??

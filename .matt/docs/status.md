@@ -9,6 +9,19 @@ wired up / open.
 
 **In flight:**
 
+- **OC-4 shared MCP bridge teardown — DEPLOYED + validated live 2026-11-20.**
+  Took upstream's fix instead of a fork patch: cherry-pick `6e3c6c466c9` of
+  upstream `d7864458a7e` (#110251) — CLI run end retires only that run's
+  session-scoped MCP runtime and leaves the shared loopback bridge up. A
+  parallel run in the same session had first written a local "pin the bridge"
+  patch (`fb1d6ba7977`), reverted in `9a2d1646d4b`. Deployed 21:23 via
+  `deploy.sh` (`af1870f7aa4`, backup
+  `~/dist-backups/2026-11-20-2123-pre-af1870f7aa4`), restart 21:25. Validated
+  21:33: a one-shot `openclaw agent` run (session key
+  `agent:openclaw:oc4-canary`) completed inside the gateway alongside the live
+  `#openclaw` session (activeSessions=2), and the live session's OpenClaw tools
+  still answered afterwards. Retire at the first rebase past `d7864458a7e`.
+
 - **Cascading global AGENTS.md — DEPLOYED + validated live 2026-10-10.**
   `870b06d1d48` (feat(hooks): operator-trusted absolute paths in
   bootstrap-extra-files): project agents now get the global house-rules

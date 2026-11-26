@@ -2,7 +2,7 @@
 
 Snapshot of how this **fork** of openclaw differs from upstream on the minimatt server: build/deploy pipeline, source-level patches, upgrade/rebase mechanics, "don't PR upstream" guardrails. Fork-only documentation — never PR this directory upstream (see "Keeping this out of upstream" at the bottom).
 
-For **deployment configuration** (bindings, agents, models turned on, plugins/hooks enabled, hot-reload matrix, restart procedure, auth, service info), see the vault: `Projects/MiniMatt/openclaw-config.md`.
+For **deployment configuration** (bindings, agents, models turned on, plugins/hooks enabled, hot-reload matrix, restart procedure, auth, service info, gateway-down rescue session), see `~/projects/minimatt/docs/openclaw-config.md` (in the vault: `Projects/DevProjects/minimatt/docs/openclaw-config.md`).
 
 ## TL;DR build & deploy flow
 

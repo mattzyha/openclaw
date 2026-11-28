@@ -103,8 +103,10 @@ wired up / open.
 
 **Next:**
 
-- **OC-2 mid-run steering for the Claude CLI backend — PAUSED 2026-11-27
-  (Matt), no code written.** Investigated 2026-11-26; findings:
+- **OC-2 mid-run steering for the Claude CLI backend — CLOSED, not built
+  (card closed 2026-11-26; Matt confirmed 2026-11-27). No code written.**
+  Superseded by the orchestration-engine design. Findings from the
+  2026-11-26 investigation, kept so the question is not re-derived:
   - Not an upgrade and not a cherry-pick: upstream's PR #159816 (`5c3dcc5`)
     builds on modules the 2026.7.1 base lacks (`extensions/anthropic/cli.runtime.ts`,
     `cli-runner/execute-plugin.ts`, `execution-target.ts`,
@@ -138,8 +140,9 @@ wired up / open.
     messages needs a "steer lane" in the Discord run queue and is the risky
     part (ordering, status reactions, the awaited reaction-cleanup hold).
   - The orchestration-engine spec (§ OpenClaw, Mid-turn steering) drops
-    chat-run steering in favour of queued work steered by notes. Resume here
-    only if that changes.
+    chat-run steering in favour of queued work steered by notes. Reopen
+    only if that changes; an upgrade past upstream's rebuilt Discord ingress
+    would also bring upstream's version.
 
 - **Agent-definition stale-capture — FIXED (`d026286af48`), deployed 13:21 + validated live 13:34 2026-09-29 (canary cwd = configured workspace, zero restarts).** Was: reply
   dispatch threads the Discord-captured cfg as a complete configOverride

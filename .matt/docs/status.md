@@ -24,6 +24,15 @@ wired up / open.
     Consumer sweep of `ReplyToId` in spec.md patch list.
   - Build staged in `~/projects/openclaw-build` at `ae58be3b8fb`; live dist
     untouched.
+  - Found while staging (not fixed, not new): the tsgo extensions lanes run
+    in this checkout write into the **live** `dist/plugin-sdk/` — about
+    6,600 `.d.ts` files, stamp files, and one runtime file,
+    `dist/plugin-sdk/webhook-path.js`, replaced by a standalone copy with the
+    same two exports (`scripts/prepare-extension-package-boundary-artifacts.mjs`,
+    `ENTRY_SHIM_RUNTIME_OUTPUTS`). The `2026-11-27-1725` and `-2214` backups
+    hold the same state, so the gateway has been running with it; each deploy
+    resets it. Candidate follow-up: run the type-check lanes in the build
+    worktree instead.
   - **To finish once Matt approves the restart:** (1)
     `.matt/scripts/deploy.sh --skip-build --sha ae58be3b8fb --reason "…"
 --marker "ReplyToId: params.replyToId"`; (2) after the restart, confirm

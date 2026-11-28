@@ -9,6 +9,35 @@ wired up / open.
 
 **In flight:**
 
+- **OC-8 picker clicks carry their picker's message id — BUILT 2026-11-28;
+  deploy and gateway restart waiting on Matt.** `ae58be3b8fb`:
+  `dispatchDiscordComponentEvent` sets `ReplyToId` to the message that
+  carries the clicked control (button, select, modal submit), so the click
+  reaches the model with `reply_to_id` in its conversation info. Reason: a
+  click arrives as the option's value text only, and every picker's
+  "Something else" option has the same value, so with two pickers open the
+  workspace could not tell which one was answered (Matt, `#openclaw` 05:15).
+  - Proof before deploy: three new assertions in `monitor.test.ts` (button,
+    select, modal) fail on the unpatched source and pass with it; Discord
+    monitor suite 855/855; tsgo extensions + extensions-test, oxfmt, oxlint
+    clean; autoreview (Claude engine, `claude-fable-5-2`) clean first pass.
+    Consumer sweep of `ReplyToId` in spec.md patch list.
+  - Build staged in `~/projects/openclaw-build` at `ae58be3b8fb`; live dist
+    untouched.
+  - **To finish once Matt approves the restart:** (1)
+    `.matt/scripts/deploy.sh --skip-build --sha ae58be3b8fb --reason "…"
+--marker "ReplyToId: params.replyToId"`; (2) after the restart, confirm
+    `openclaw gateway status` is clean and the marker is in the live dist;
+    (3) live check: send a picker in `#openclaw`, have Matt click it, and
+    confirm the click's conversation info carries `reply_to_id` equal to the
+    picker's message id; (4) record the deploy here and in the spec.md
+    entry, commit, push; (5) ask the claude-config workspace to add the
+    "match `reply_to_id` to the picker's `messageId`" line to the
+    `discord-picker` skill, and update § Decision Pickers in
+    `~/projects/minimatt/docs/openclaw-config.md`; (6) close `OC-8` with a
+    read-back; (7) completion summary in `#openclaw` plus `sessions_send` to
+    `agent:main:discord:channel:1573296384000655492`.
+
 - **OC-5 model fallback wipes a channel session — DEPLOYED 2026-11-27;
   live proof still to come.** `e9cfef02add`: `hasProviderOwnedSession` now
   looks for the Claude Code session under both the override provider and the

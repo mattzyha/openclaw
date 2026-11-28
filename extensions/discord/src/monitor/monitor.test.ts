@@ -345,6 +345,9 @@ describe("discord component interactions", () => {
     expect(lastDispatchCtx?.BodyForAgent).toBe('Clicked "Approve".');
     // Failure copy is only guaranteed for user requests; a click must carry the kind.
     expect(lastDispatchCtx?.InboundEventKind).toBe("user_request");
+    // The click names its source message, so two open pickers that share an
+    // option's wording can be told apart.
+    expect(lastDispatchCtx?.ReplyToId).toBe("msg-1");
     expect(dispatchReplyMock).toHaveBeenCalledTimes(1);
     const dispatchParams = firstMockArg(dispatchReplyMock, "dispatchReplyMock") as
       | DispatchParams
@@ -448,6 +451,7 @@ describe("discord component interactions", () => {
     expect(reply).toHaveBeenCalledWith({ content: "✓", ephemeral: true });
     expect(lastDispatchCtx?.BodyForAgent).toBe('Selected Alpha from "Pick".');
     expect(lastDispatchCtx?.InboundEventKind).toBe("user_request");
+    expect(lastDispatchCtx?.ReplyToId).toBe("msg-1");
     expect(dispatchReplyMock).toHaveBeenCalledTimes(1);
   });
 
@@ -719,6 +723,7 @@ describe("discord component interactions", () => {
     expect(acknowledge).toHaveBeenCalledTimes(1);
     expect(lastDispatchCtx?.BodyForAgent).toContain('Form "Details" submitted.');
     expect(lastDispatchCtx?.BodyForAgent).toContain("- Name: Casey");
+    expect(lastDispatchCtx?.ReplyToId).toBe("msg-2");
     expect(dispatchReplyMock).toHaveBeenCalledTimes(1);
     expect(resolveDiscordModalEntry({ id: "mdl_1" })).toBeNull();
   });

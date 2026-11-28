@@ -231,6 +231,14 @@ export async function dispatchDiscordComponentEvent(params: {
     },
     CommandSource: "text" as const,
     MessageSid: interaction.rawData.id,
+    // The message that carries the clicked control. The event text is only the
+    // option's own words, and two open component messages can offer an option
+    // with identical words, so without this id the agent cannot tell which one
+    // was answered. Same slot an ordinary Discord reply fills (quote id), so it
+    // reaches the model as reply_to_id. Delivery is not driven by this field:
+    // replies here go through replyReference below, which is seeded from the
+    // same id and still obeys replyToMode.
+    ReplyToId: params.replyToId,
     Timestamp: timestamp,
     OriginatingChannel: "discord" as const,
     OriginatingTo:

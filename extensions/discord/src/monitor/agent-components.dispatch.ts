@@ -218,6 +218,10 @@ export async function dispatchDiscordComponentEvent(params: {
     Provider: "discord" as const,
     Surface: "discord" as const,
     WasMentioned: true,
+    // A click is a person asking for something. Failure copy is only guaranteed
+    // for user requests (resolveExternalRunFailureTextForConversation); without
+    // the kind, a click-started run that fails in a channel ends in silence.
+    InboundEventKind: "user_request" as const,
     CommandAuthorized: commandAuthorized,
     CommandTurn: {
       kind: "text-slash" as const,

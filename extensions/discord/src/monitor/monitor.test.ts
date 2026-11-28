@@ -343,6 +343,8 @@ describe("discord component interactions", () => {
 
     expect(reply).toHaveBeenCalledWith({ content: "✓", ephemeral: true });
     expect(lastDispatchCtx?.BodyForAgent).toBe('Clicked "Approve".');
+    // Failure copy is only guaranteed for user requests; a click must carry the kind.
+    expect(lastDispatchCtx?.InboundEventKind).toBe("user_request");
     expect(dispatchReplyMock).toHaveBeenCalledTimes(1);
     const dispatchParams = firstMockArg(dispatchReplyMock, "dispatchReplyMock") as
       | DispatchParams
@@ -445,6 +447,7 @@ describe("discord component interactions", () => {
 
     expect(reply).toHaveBeenCalledWith({ content: "✓", ephemeral: true });
     expect(lastDispatchCtx?.BodyForAgent).toBe('Selected Alpha from "Pick".');
+    expect(lastDispatchCtx?.InboundEventKind).toBe("user_request");
     expect(dispatchReplyMock).toHaveBeenCalledTimes(1);
   });
 

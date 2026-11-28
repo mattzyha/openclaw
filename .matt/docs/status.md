@@ -103,6 +103,44 @@ wired up / open.
 
 **Next:**
 
+- **OC-2 mid-run steering for the Claude CLI backend — PAUSED 2026-11-27
+  (Matt), no code written.** Investigated 2026-11-26; findings:
+  - Not an upgrade and not a cherry-pick: upstream's PR #159816 (`5c3dcc5`)
+    builds on modules the 2026.7.1 base lacks (`extensions/anthropic/cli.runtime.ts`,
+    `cli-runner/execute-plugin.ts`, `execution-target.ts`,
+    `reply-run-registry.contracts.ts`, `message-injection-authority.ts`).
+  - **Two blockers, not one.** (1) The CLI `ReplyBackendHandle` in
+    `src/agents/cli-runner/claude-live-session.ts` has no way to accept
+    same-run input. (2) The Discord plugin serializes same-session messages
+    before core ever sees them: `extensions/discord/src/monitor/message-run-queue.ts`
+    chains each inbound job on a `KeyedAsyncQueue` keyed by the session key,
+    and the job awaits the whole run — pinned by
+    `message-handler.queue.test.ts` ("deduplicates accepted typing feedback
+    while same-session runs are queued"). So a Discord message sent mid-run
+    never reaches the steer block in `src/auto-reply/reply/agent-runner.ts`.
+    Upstream deleted that queue and rebuilt Discord ingress.
+  - Live probe on Claude CLI 2.1.316 (`.matt/scripts/steer-probe.py`):
+    `system/init` advertises `msg_lifecycle_v1`; each stdin user message gets
+    `command_lifecycle` receipts (`queued` / `started` / `completed`) keyed by
+    the `uuid` sent with it. Injected while a tool ran: `started` right after
+    the tool result, one `result`, reply honoured it. Injected after the answer
+    text began: stayed `queued`, first `result` emitted, then ran as a second
+    query with its own `result` — the fork finishes the run on the first
+    `result`, so an implementation must hold the run while an injected input
+    has no terminal receipt, and close the process if one is orphaned.
+  - Design reached: a confirmed-steer method on the CLI handle (resolve on
+    `started`, reject → today's queueing), called only for a person's steering
+    — not from `sessions_send` or subagent announces, which share
+    `queueEmbeddedAgentMessageWithOutcomeAsync` and would otherwise start
+    injecting into running runs. Lowest-risk entry point: the native `/steer`
+    slash command, which does not go through the Discord run queue (unverified
+    that it reaches a same-channel CLI run). Automatic steering of ordinary
+    messages needs a "steer lane" in the Discord run queue and is the risky
+    part (ordering, status reactions, the awaited reaction-cleanup hold).
+  - The orchestration-engine spec (§ OpenClaw, Mid-turn steering) drops
+    chat-run steering in favour of queued work steered by notes. Resume here
+    only if that changes.
+
 - **Agent-definition stale-capture — FIXED (`d026286af48`), deployed 13:21 + validated live 13:34 2026-09-29 (canary cwd = configured workspace, zero restarts).** Was: reply
   dispatch threads the Discord-captured cfg as a complete configOverride
   (`message-handler.process.ts` → `dispatchInboundMessageWithBufferedDispatcher`

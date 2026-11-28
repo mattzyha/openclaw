@@ -9,8 +9,8 @@ wired up / open.
 
 **In flight:**
 
-- **OC-8 picker clicks carry their picker's message id — DEPLOYED
-  2026-11-28 05:34; live click proof pending.** `ae58be3b8fb`:
+- **OC-8 picker clicks carry their picker's message id — DONE 2026-11-28
+  (deployed 05:34, proven live 05:39).** `ae58be3b8fb`:
   `dispatchDiscordComponentEvent` sets `ReplyToId` to the message that
   carries the clicked control (button, select, modal submit), so the click
   reaches the model with `reply_to_id` in its conversation info. Reason: a
@@ -31,17 +31,21 @@ wired up / open.
   - Verified 05:39: `gateway status` running, connectivity probe ok, marker
     `ReplyToId: params.replyToId` in `dist/provider-BywZLQWk.js`, no errors
     from the new process in the journal.
-  - **Live proof in progress:** Matt asked for two test pickers; sent 05:38 in
-    `#openclaw` — A `1576230944073982023` (tea/coffee), B
-    `1576230953070633032` (cats/dogs). A click proves the fix when its
-    conversation info carries `reply_to_id` equal to that picker's id. Delete
-    both pickers once answered.
-  - **Still to do after the click:** (1) ask the claude-config workspace to
-    add the "match `reply_to_id` to the picker's `messageId`" line to the
-    `discord-picker` skill; (2) update § Decision Pickers in
-    `~/projects/minimatt/docs/openclaw-config.md`; (3) close `OC-8` with a
-    read-back; (4) completion summary in `#openclaw` plus `sessions_send` to
-    `agent:main:discord:channel:1573296384000655492`.
+  - **Proven live:** two test pickers sent 05:38 in `#openclaw` (A
+    `1576230944073982023`, B `1576230953070633032`). Matt's escape click at
+    05:39 arrived with `reply_to_id: 1576230944073982023` (picker A) while B
+    was open, and a real-option click at 05:43 on a third picker carried that
+    picker's id (`1576231514046201917`). Dropdown picks and form submissions
+    are covered by tests only.
+  - Wrap-up: `OC-8` closed; § Decision Pickers in
+    `~/projects/minimatt/docs/openclaw-config.md` updated (`ea7e421`);
+    summary posted in `#openclaw` and relayed to the main session.
+  - Handed to claude-config as `CC-14` (05:45): the `discord-picker` skill
+    line that tells workspaces to match `reply_to_id` to the picker's
+    `messageId`, plus Matt's 05:43 decision that the reply to a "Something
+    else" click repeats the picker's question (the picker is deleted on that
+    click). When claude-config reports back, bring openclaw-config.md in
+    line.
   - **Restart kills in-flight runs on this box (found 2026-11-28, not
     fixed, no card yet).** Every restart in the journal is handled as a plain
     stop (`received SIGTERM; shutting down`, shutdown done in under a

@@ -9,8 +9,8 @@ wired up / open.
 
 **In flight:**
 
-- **OC-8 picker clicks carry their picker's message id — BUILT 2026-11-28;
-  deploy and gateway restart waiting on Matt.** `ae58be3b8fb`:
+- **OC-8 picker clicks carry their picker's message id — DEPLOYED
+  2026-11-28 05:34; live click proof pending.** `ae58be3b8fb`:
   `dispatchDiscordComponentEvent` sets `ReplyToId` to the message that
   carries the clicked control (button, select, modal submit), so the click
   reaches the model with `reply_to_id` in its conversation info. Reason: a
@@ -22,8 +22,39 @@ wired up / open.
     monitor suite 855/855; tsgo extensions + extensions-test, oxfmt, oxlint
     clean; autoreview (Claude engine, `claude-fable-5-2`) clean first pass.
     Consumer sweep of `ReplyToId` in spec.md patch list.
-  - Build staged in `~/projects/openclaw-build` at `ae58be3b8fb`; live dist
-    untouched.
+  - Deploy: Matt approved in `#openclaw` 05:33. Deployed 05:34 via
+    `deploy.sh --skip-build --sha ae58be3b8fb` (build staged earlier in
+    `~/projects/openclaw-build`, backup
+    `~/dist-backups/2026-11-28-0534-pre-ae58be3b8fb`), restart 05:35:05
+    (pid 1509566), `[gateway] ready` 05:35:21. Before deploying, the process
+    list showed no other `claude -p` run (see the restart note below).
+  - Verified 05:39: `gateway status` running, connectivity probe ok, marker
+    `ReplyToId: params.replyToId` in `dist/provider-BywZLQWk.js`, no errors
+    from the new process in the journal.
+  - **Live proof in progress:** Matt asked for two test pickers; sent 05:38 in
+    `#openclaw` — A `1576230944073982023` (tea/coffee), B
+    `1576230953070633032` (cats/dogs). A click proves the fix when its
+    conversation info carries `reply_to_id` equal to that picker's id. Delete
+    both pickers once answered.
+  - **Still to do after the click:** (1) ask the claude-config workspace to
+    add the "match `reply_to_id` to the picker's `messageId`" line to the
+    `discord-picker` skill; (2) update § Decision Pickers in
+    `~/projects/minimatt/docs/openclaw-config.md`; (3) close `OC-8` with a
+    read-back; (4) completion summary in `#openclaw` plus `sessions_send` to
+    `agent:main:discord:channel:1573296384000655492`.
+  - **Restart kills in-flight runs on this box (found 2026-11-28, not
+    fixed, no card yet).** Every restart in the journal is handled as a plain
+    stop (`received SIGTERM; shutting down`, shutdown done in under a
+    second) — no active-work drain. Likely cause, read in code but not
+    tested: `openclaw gateway restart` writes its restart intent for the
+    service's main PID, which is the `doppler run` wrapper, and the gateway
+    (its child) only consumes an intent addressed to its own PID
+    (`consumeGatewayRestartIntentPayloadSync`, `src/infra/restart.ts`);
+    systemd `KillMode=control-group` then signals every Claude Code child at
+    once. Until fixed: before any restart, check `pgrep -af "^claude -p"`
+    for runs in other workspaces — `sessions_list` status is not enough (a
+    nested run finishing showed `done` on `#projectctl` at 05:29 while its
+    16-minute main run was still going).
   - Found while staging (not fixed, not new): the tsgo extensions lanes run
     in this checkout write into the **live** `dist/plugin-sdk/` — about
     6,600 `.d.ts` files, stamp files, and one runtime file,
@@ -33,20 +64,6 @@ wired up / open.
     hold the same state, so the gateway has been running with it; each deploy
     resets it. Candidate follow-up: run the type-check lanes in the build
     worktree instead.
-  - **To finish once Matt approves the restart:** (1)
-    `.matt/scripts/deploy.sh --skip-build --sha ae58be3b8fb --reason "…"
---marker "ReplyToId: params.replyToId"`; (2) after the restart, confirm
-    `openclaw gateway status` is clean and the marker is in the live dist;
-    (3) live check: send a picker in `#openclaw`, have Matt click it, and
-    confirm the click's conversation info carries `reply_to_id` equal to the
-    picker's message id; (4) record the deploy here and in the spec.md
-    entry, commit, push; (5) ask the claude-config workspace to add the
-    "match `reply_to_id` to the picker's `messageId`" line to the
-    `discord-picker` skill, and update § Decision Pickers in
-    `~/projects/minimatt/docs/openclaw-config.md`; (6) close `OC-8` with a
-    read-back; (7) completion summary in `#openclaw` plus `sessions_send` to
-    `agent:main:discord:channel:1573296384000655492`.
-
 - **OC-5 model fallback wipes a channel session — DEPLOYED 2026-11-27;
   live proof still to come.** `e9cfef02add`: `hasProviderOwnedSession` now
   looks for the Claude Code session under both the override provider and the

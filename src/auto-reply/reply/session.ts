@@ -8,10 +8,10 @@ import {
 import { retireSessionMcpRuntime } from "../../agents/agent-bundle-mcp-tools.js";
 import { resolveSessionAgentId } from "../../agents/agent-scope.js";
 import { clearBootstrapSnapshotOnSessionRollover } from "../../agents/bootstrap-cache.js";
-import { getCliSessionBinding } from "../../agents/cli-session.js";
 import { resetRegisteredAgentHarnessSessions } from "../../agents/harness/registry.js";
 import { cleanupBrowserSessionsForLifecycleEnd } from "../../browser-lifecycle-cleanup.js";
 import { normalizeChatType } from "../../channels/chat-type.js";
+import { hasProviderOwnedSession } from "../../config/sessions/entry-freshness.js";
 import { resolveGroupSessionKey } from "../../config/sessions/group.js";
 import {
   hasTerminalMainSessionTranscriptNewerThanRegistry,
@@ -160,11 +160,6 @@ function resolveStaleSessionEndReason(params: {
   freshness?: SessionFreshness;
 }): ReplySessionEndReason | undefined {
   return params.entry ? params.freshness?.staleReason : undefined;
-}
-
-function hasProviderOwnedSession(entry: SessionEntry | undefined): boolean {
-  const provider = normalizeOptionalString(entry?.providerOverride ?? entry?.modelProvider);
-  return Boolean(provider && getCliSessionBinding(entry, provider));
 }
 
 function isRecoverableTerminalSessionStatus(status: SessionEntry["status"] | undefined): boolean {

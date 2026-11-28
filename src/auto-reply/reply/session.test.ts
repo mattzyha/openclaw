@@ -4475,6 +4475,73 @@ describe("initSessionState preserves behavior overrides across /new and /reset",
     }
   });
 
+  it("keeps a provider-owned CLI session when an auto model-fallback pin names the canonical provider", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date(2026, 0, 18, 5, 0, 0));
+      const storePath = await createStorePath("openclaw-cli-implicit-reset-fallback-pin-");
+      const sessionKey = "agent:main:discord:channel:claude-cli-fallback-pin";
+      const existingSessionId = "provider-owned-fallback-pin-session";
+      const transcriptPath = path.join(path.dirname(storePath), `${existingSessionId}.jsonl`);
+      const cliBinding = {
+        sessionId: "claude-session-fallback-pin",
+        authProfileId: "anthropic:claude-cli",
+        mcpResumeHash: "mcp-resume-hash",
+      };
+
+      await writeSessionStoreFast(storePath, {
+        [sessionKey]: {
+          sessionId: existingSessionId,
+          updatedAt: new Date(2026, 0, 18, 3, 0, 0).getTime(),
+          modelProvider: "claude-cli",
+          model: "claude-opus-4-6",
+          // Written by a usage-limit fallback: canonical provider, not the CLI runtime id the
+          // binding is filed under.
+          providerOverride: "anthropic",
+          modelOverride: "claude-opus-4-6",
+          modelOverrideSource: "auto",
+          modelOverrideFallbackOriginProvider: "anthropic",
+          modelOverrideFallbackOriginModel: "claude-sonnet-4-6",
+          cliSessionBindings: {
+            "claude-cli": cliBinding,
+          },
+          cliSessionIds: {
+            "claude-cli": cliBinding.sessionId,
+          },
+          claudeCliSessionId: cliBinding.sessionId,
+        },
+      });
+      await fs.writeFile(transcriptPath, '{"type":"message"}\n', "utf8");
+
+      const cfg = { session: { store: storePath } } as OpenClawConfig;
+      const result = await initSessionState({
+        ctx: {
+          Body: "hello",
+          RawBody: "hello",
+          CommandBody: "hello",
+          From: "claude-cli-user",
+          To: "bot",
+          ChatType: "channel",
+          SessionKey: sessionKey,
+          Provider: "discord",
+          Surface: "discord",
+        },
+        cfg,
+        commandAuthorized: true,
+      });
+
+      expect(result.isNewSession).toBe(false);
+      expect(result.sessionId).toBe(existingSessionId);
+      expect(result.sessionEntry.cliSessionBindings?.["claude-cli"]).toEqual(cliBinding);
+      const archived = (await fs.readdir(path.dirname(storePath))).filter((entry) =>
+        entry.startsWith(`${existingSessionId}.jsonl.reset.`),
+      );
+      expect(archived).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("honors explicit reset policies for provider-owned CLI sessions", async () => {
     const storePath = await createStorePath("openclaw-cli-explicit-reset-");
     const sessionKey = "agent:main:telegram:dm:claude-cli-explicit-user";

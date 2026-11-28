@@ -45,9 +45,20 @@ export type ResolvedSessionEntryResetFreshness =
       resetType: SessionResetType;
     };
 
+/**
+ * True when a CLI backend owns the conversation behind this entry, which exempts it from
+ * implicit (unconfigured) daily/idle expiry.
+ */
 export function hasProviderOwnedSession(entry: SessionEntry | undefined): boolean {
-  const provider = normalizeOptionalString(entry?.providerOverride ?? entry?.modelProvider);
-  return Boolean(provider && getCliSessionBinding(entry, provider));
+  // CLI bindings are filed under the runtime provider that ran the turn (modelProvider, e.g.
+  // "claude-cli"). A model override, including the automatic model-fallback pin, names the
+  // canonical provider instead (e.g. "anthropic") while the same CLI backend keeps running the
+  // session. Check both ids: reading only the override made a fallback drop the exemption and
+  // reset the session on its next message.
+  return [entry?.providerOverride, entry?.modelProvider].some((candidate) => {
+    const provider = normalizeOptionalString(candidate);
+    return Boolean(provider && getCliSessionBinding(entry, provider));
+  });
 }
 
 /** Resolves one session entry's reset freshness using the runtime lifecycle rules. */

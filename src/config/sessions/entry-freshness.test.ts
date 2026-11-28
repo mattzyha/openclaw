@@ -102,6 +102,71 @@ describe("resolveSessionEntryResetFreshness", () => {
     expect(result.freshness).toMatchObject({ fresh: true });
   });
 
+  it("keeps provider-owned sessions fresh when an auto model-fallback pin names the canonical provider", async () => {
+    // Row shape seen in production after a claude-cli usage-limit fallback: the pin names the
+    // canonical provider while the CLI binding stays under the runtime provider.
+    const sessionKey = "agent:main:main:thread:provider-owned-fallback-pin";
+    const now = new Date("2026-01-02T12:00:00Z").getTime();
+    await upsertSessionEntry(
+      { sessionKey, storePath },
+      {
+        sessionId: "session-provider-owned-fallback-pin",
+        updatedAt: now,
+        sessionStartedAt: now - 2 * DAY_MS,
+        lastInteractionAt: now - 2 * DAY_MS,
+        modelProvider: "claude-cli",
+        model: "claude-opus-4-6",
+        providerOverride: "anthropic",
+        modelOverride: "claude-opus-4-6",
+        modelOverrideSource: "auto",
+        cliSessionBindings: {
+          "claude-cli": { sessionId: "cli-session-provider-owned-fallback-pin" },
+        },
+      },
+    );
+
+    const result = resolveSessionEntryResetFreshness({
+      sessionKey,
+      storePath,
+      sessionCfg: {},
+      resetType: "thread",
+      now,
+    });
+
+    expect(result.state).toBe("fresh");
+    expect(result.freshness).toMatchObject({ fresh: true });
+  });
+
+  it("expires a session whose override and runtime providers both lack a CLI binding", async () => {
+    const sessionKey = "agent:main:main:thread:no-binding-for-either-provider";
+    const now = new Date("2026-01-02T12:00:00Z").getTime();
+    await upsertSessionEntry(
+      { sessionKey, storePath },
+      {
+        sessionId: "session-no-binding-for-either-provider",
+        updatedAt: now,
+        sessionStartedAt: now - 2 * DAY_MS,
+        lastInteractionAt: now - 2 * DAY_MS,
+        modelProvider: "openai",
+        providerOverride: "anthropic",
+        cliSessionBindings: {
+          "claude-cli": { sessionId: "cli-session-left-over" },
+        },
+      },
+    );
+
+    const result = resolveSessionEntryResetFreshness({
+      sessionKey,
+      storePath,
+      sessionCfg: {},
+      resetType: "thread",
+      now,
+    });
+
+    expect(result.state).toBe("stale");
+    expect(result.freshness).toMatchObject({ fresh: false, staleReason: "daily" });
+  });
+
   it("applies configured reset policies to provider-owned sessions", async () => {
     const sessionKey = "agent:main:main:thread:provider-owned-configured";
     const now = new Date("2026-01-02T12:00:00Z").getTime();

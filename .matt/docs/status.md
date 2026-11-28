@@ -23,12 +23,16 @@ wired up / open.
     (`ab7614f9f32`, backup `~/dist-backups/2026-11-27-1725-pre-ab7614f9f32`),
     restart 17:29 (pid 1309924), verified 17:30.
   - House rule: "Decision pickers" under Discord conduct in
-    `~/.openclaw/shared/AGENTS.md` (Matt approved 17:33).
+    `~/.openclaw/shared/AGENTS.md` (Matt approved 17:33). Since 18:40
+    (`CC-11`, claude-config workspace) that paragraph is a pointer: the
+    writing rules live in the `discord-picker` skill, and the
+    `discord_picker_guard` hook refuses a malformed picker before it is
+    sent.
   - Behaviour seen in the `#openclaw` trial is recorded in
     `~/projects/minimatt/docs/openclaw-config.md` § Decision Pickers.
   - A button with neither `value` nor `action` is dropped without an error:
-    the 17:26 picker went out as text only. The house rule requires a
-    `value` on every button.
+    the 17:26 picker went out as text only. The skill requires a `value`
+    on every button, and the guard refuses a button without one.
   - Seen live 17:37: a click on a button with a `value` arrived as that
     text, flagged `inbound_event_kind: user_request` (the patch working).
   - Not yet seen live: a picker sent before a gateway restart still working

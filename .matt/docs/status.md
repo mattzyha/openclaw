@@ -9,12 +9,14 @@ wired up / open.
 
 **In flight:**
 
-- **OC-7 decision pickers in Discord chats — IN PROGRESS (started
-  2026-11-27).** Config, hot-applied 17:04 with no gateway restart:
-  `channels.discord.agentComponents.ttlMs = 86400000` (24 h) and the
-  `message` tool for project workspaces via per-agent
-  `tools.alsoAllow: ["message"]` (trial on `openclaw` first; backup
-  `~/.openclaw/openclaw.json.bak-2026-11-27-pre-oc7-pickers`). Live trial in
+- **OC-7 decision pickers in Discord chats — DEPLOYED + rolled out
+  2026-11-27; house rule pending Matt's approval.** Config, hot-applied
+  with no gateway restart: `channels.discord.agentComponents.ttlMs = 86400000`
+  (24 h) and the `message` tool for every project workspace via per-agent
+  `tools.alsoAllow: ["message"]` (trial on `openclaw` 17:04, the other 15
+  coding-profile workspaces 17:30; backups
+  `~/.openclaw/openclaw.json.bak-2026-11-27-pre-oc7-pickers` and
+  `…-pre-oc7-rollout`). Live trial in
   `#openclaw` passed: buttons and a select sent with
   `message(action=send, presentation=…)`; a button click arrives as the
   button's `value` (or `Clicked "<label>".` when it has none), a select pick
@@ -23,8 +25,13 @@ wired up / open.
   a failed click-run is not silent (spec.md patch list). Decided by Matt:
   the picker states the whole question (it is sent mid-run, so it lands
   above the text reply); roll out to every project workspace once the patch
-  is live. Remaining: deploy the patch, roll the tool out, house rule in the
-  global AGENTS.md, config record in `~/projects/minimatt/docs/openclaw-config.md`.
+  is live. Patch deployed 17:25 (`ab7614f9f32`, backup
+  `~/dist-backups/2026-11-27-1725-pre-ab7614f9f32`), restart 17:29 (pid
+  1309924), verified 17:30. Config record updated in
+  `~/projects/minimatt/docs/openclaw-config.md` (Tool Profiles, Decision
+  Pickers). Remaining: the house rule in the global AGENTS.md (wording
+  proposed in `#openclaw`; until it lands no workspace is told to use
+  pickers), then close the card.
 
 - **OC-3 silent usage-limit failures — DEPLOYED 2026-11-21; matcher not yet
   proven live (needs the plan limit to trip).** `1b775f58429`: one

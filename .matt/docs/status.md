@@ -9,6 +9,23 @@ wired up / open.
 
 **In flight:**
 
+- **OC-7 decision pickers in Discord chats — IN PROGRESS (started
+  2026-11-27).** Config, hot-applied 17:04 with no gateway restart:
+  `channels.discord.agentComponents.ttlMs = 86400000` (24 h) and the
+  `message` tool for project workspaces via per-agent
+  `tools.alsoAllow: ["message"]` (trial on `openclaw` first; backup
+  `~/.openclaw/openclaw.json.bak-2026-11-27-pre-oc7-pickers`). Live trial in
+  `#openclaw` passed: buttons and a select sent with
+  `message(action=send, presentation=…)`; a button click arrives as the
+  button's `value` (or `Clicked "<label>".` when it has none), a select pick
+  as `Selected <label> from "<placeholder>".`; a click made during a run ran
+  as the next run. Fork patch `3d522a64239` marks clicks as user requests so
+  a failed click-run is not silent (spec.md patch list). Decided by Matt:
+  the picker states the whole question (it is sent mid-run, so it lands
+  above the text reply); roll out to every project workspace once the patch
+  is live. Remaining: deploy the patch, roll the tool out, house rule in the
+  global AGENTS.md, config record in `~/projects/minimatt/docs/openclaw-config.md`.
+
 - **OC-3 silent usage-limit failures — DEPLOYED 2026-11-21; matcher not yet
   proven live (needs the plan limit to trip).** `1b775f58429`: one
   shared matcher (`SUBSCRIPTION_LIMIT_REACHED_RE`) covers the Claude CLI

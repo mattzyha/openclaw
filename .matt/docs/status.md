@@ -26,10 +26,12 @@ wired up / open.
     `~/.openclaw/shared/AGENTS.md` (Matt approved 17:33).
   - Behaviour seen in the `#openclaw` trial is recorded in
     `~/projects/minimatt/docs/openclaw-config.md` § Decision Pickers.
+  - A button with neither `value` nor `action` is dropped without an error:
+    the 17:26 picker went out as text only. The house rule requires a
+    `value` on every button.
   - Not yet seen live: a picker sent before a gateway restart still working
     after it (the registry persists entries, `components-registry.ts`); a
-    value-less button arriving as `Clicked "<label>".` (asserted by
-    `monitor.test.ts`); a failed click-run posting the failure notice.
+    failed click-run posting the failure notice.
 
 - **OC-3 silent usage-limit failures — DEPLOYED 2026-11-21; matcher not yet
   proven live (needs the plan limit to trip).** `1b775f58429`: one

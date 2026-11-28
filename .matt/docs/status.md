@@ -44,8 +44,10 @@ wired up / open.
     line that tells workspaces to match `reply_to_id` to the picker's
     `messageId`, plus Matt's 05:43 decision that the reply to a "Something
     else" click repeats the picker's question (the picker is deleted on that
-    click). When claude-config reports back, bring openclaw-config.md in
-    line.
+    click). Both are live in the skill (claude-config `2ad9737`), and
+    openclaw-config.md is in line with it (`4d91f82`). `CC-14` itself stays
+    open in claude-config until Matt answers whether the house rule should
+    carry the two steps as well.
   - **Restart kills in-flight runs on this box (found 2026-11-28, not
     fixed, no card yet).** Every restart in the journal is handled as a plain
     stop (`received SIGTERM; shutting down`, shutdown done in under a

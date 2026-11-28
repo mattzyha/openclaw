@@ -9,10 +9,9 @@ wired up / open.
 
 **In flight:**
 
-- **OC-5 model fallback wipes a channel session — BUILT 2026-11-27, NOT
-  DEPLOYED: waiting on Matt's go-ahead for the gateway restart (asked in
-  `#openclaw` 22:10).** `e9cfef02add`: `hasProviderOwnedSession` now looks
-  for the Claude Code session under both the override provider and the
+- **OC-5 model fallback wipes a channel session — DEPLOYED 2026-11-27;
+  live proof still to come.** `e9cfef02add`: `hasProviderOwnedSession` now
+  looks for the Claude Code session under both the override provider and the
   runtime provider, so a fallback pin (`providerOverride: "anthropic"`) no
   longer drops the exemption from the stock 04:00 daily reset. The duplicate
   copy in `src/auto-reply/reply/session.ts` is gone; every caller reads the
@@ -21,32 +20,36 @@ wired up / open.
   Fable-limit fallback (archive
   `~/.openclaw/agents/openclaw/sessions/8ececf05-…jsonl.reset.2026-11-28T05-45-17.685Z`).
   Upstream main read the same evening: still has the bug.
-  - Proof so far: both new regression tests fail on the unpatched source and
-    pass with it; `session.test.ts` 137, gateway `agent.test.ts` + sibling
-    392, `src/agents/command` green; tsgo core + core-test, oxfmt, oxlint
-    clean; autoreview (Claude engine, `claude-opus-5-5` because Fable was
-    limited) clean on the first pass.
-  - Staged, live dist untouched: `~/projects/openclaw-build/dist` is built
-    from `e9cfef02add` (25s, marker `entry?.providerOverride, entry?.modelProvider`
-    in `entry-freshness-*.js`). The live dist was deliberately not rsynced:
-    a running gateway lazy-loads chunks, so replacing them hours before a
-    restart risks `Cannot find module` in the live process.
-  - **To finish once Matt approves the restart:**
-    `.matt/scripts/deploy.sh --skip-build --sha e9cfef02add --reason "OC-5: fallback pin no longer wipes CLI sessions" --marker "entry?.providerOverride, entry?.modelProvider"`
-    (backs up, rsyncs both trees, checks the marker, restarts in 30s). If
-    main has moved since, rebuild instead (plain `deploy.sh` with the same
-    `--reason`/`--marker`). Then: `openclaw gateway status`, confirm the
-    marker in the live dist, record the deploy here and in spec.md, update the
-    OC-5 note in `~/projects/minimatt/docs/openclaw-config.md` § session
-    lifetime (it still says "open"), close the `OC-5` card, post the wrap-up
-    in `#openclaw` and relay it to the main session.
-  - Live proof still to come after the restart: a session that carries the
-    pin survives its next message past 04:00. One row carries it today
-    (`agent:main:discord:channel:1573314314859970580`).
+  - Proof before deploy: both new regression tests fail on the unpatched
+    source and pass with it; `session.test.ts` 137, gateway `agent.test.ts` +
+    sibling 392, `src/agents/command` green; tsgo core + core-test, oxfmt,
+    oxlint clean; autoreview (Claude engine, `claude-opus-5-5` because Fable
+    was limited) clean on the first pass.
+  - Deploy: Matt approved the deploy and restart in `#openclaw` 22:13.
+    Deployed 22:14 via `deploy.sh --skip-build --sha e9cfef02add` (build
+    staged earlier in `~/projects/openclaw-build`, backup
+    `~/dist-backups/2026-11-27-2214-pre-e9cfef02add`), restart 22:15:06
+    (pid 1348159), `[gateway] ready` 22:15:19.
+  - Verified 22:20: `gateway status` clean, connectivity probe ok, 12 plugins
+    loaded, no errors in the new process's journal, marker
+    `entry?.providerOverride, entry?.modelProvider` in
+    `dist/entry-freshness-Y_4pPuas.js`, and the pre-patch text
+    (`providerOverride ?? entry?.modelProvider`) in no live chunk. The one
+    `Cannot find module` line (`control-service-*.js`, browser-control stop)
+    is from the outgoing process at shutdown — same pattern as earlier
+    deploys. `#openclaw`'s session resumed across the restart
+    (`useResume=true`).
+  - **Live proof still to come:** a session that carries the pin survives
+    its next message past 04:00. One row carries it as of 22:20
+    (`agent:main:discord:channel:1573314314859970580`: `providerOverride:
+"anthropic"`, `modelOverrideSource: "auto"`, `modelProvider:
+"claude-cli"`, CLI binding present). If that channel's next message logs
+    `useResume=true` instead of starting fresh, the fix is proven.
   - Known unrelated failure: `entry-freshness.test.ts` "resolves fresh daily
     freshness for active lifecycle timestamps" fails on unmodified main in
     this box's timezone (its fixed clock is exactly 04:00 Pacific); passes
     with `TZ=UTC`.
+  - Follow-up worth doing: report the lookup bug upstream.
 
 - **OC-7 decision pickers in Discord chats — DONE 2026-11-27 (deployed,
   rolled out, house rule in).** Workspaces can ask Matt a fixed-choice

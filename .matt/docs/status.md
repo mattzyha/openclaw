@@ -9,6 +9,45 @@ wired up / open.
 
 **In flight:**
 
+- **OC-5 model fallback wipes a channel session — BUILT 2026-11-27, NOT
+  DEPLOYED: waiting on Matt's go-ahead for the gateway restart (asked in
+  `#openclaw` 22:10).** `e9cfef02add`: `hasProviderOwnedSession` now looks
+  for the Claude Code session under both the override provider and the
+  runtime provider, so a fallback pin (`providerOverride: "anthropic"`) no
+  longer drops the exemption from the stock 04:00 daily reset. The duplicate
+  copy in `src/auto-reply/reply/session.ts` is gone; every caller reads the
+  shared export. Trigger for doing it now: `#openclaw`'s own session (running
+  since 2026-11-20) was wiped at 21:45 on the first message after a 21:42
+  Fable-limit fallback (archive
+  `~/.openclaw/agents/openclaw/sessions/8ececf05-…jsonl.reset.2026-11-28T05-45-17.685Z`).
+  Upstream main read the same evening: still has the bug.
+  - Proof so far: both new regression tests fail on the unpatched source and
+    pass with it; `session.test.ts` 137, gateway `agent.test.ts` + sibling
+    392, `src/agents/command` green; tsgo core + core-test, oxfmt, oxlint
+    clean; autoreview (Claude engine, `claude-opus-5-5` because Fable was
+    limited) clean on the first pass.
+  - Staged, live dist untouched: `~/projects/openclaw-build/dist` is built
+    from `e9cfef02add` (25s, marker `entry?.providerOverride, entry?.modelProvider`
+    in `entry-freshness-*.js`). The live dist was deliberately not rsynced:
+    a running gateway lazy-loads chunks, so replacing them hours before a
+    restart risks `Cannot find module` in the live process.
+  - **To finish once Matt approves the restart:**
+    `.matt/scripts/deploy.sh --skip-build --sha e9cfef02add --reason "OC-5: fallback pin no longer wipes CLI sessions" --marker "entry?.providerOverride, entry?.modelProvider"`
+    (backs up, rsyncs both trees, checks the marker, restarts in 30s). If
+    main has moved since, rebuild instead (plain `deploy.sh` with the same
+    `--reason`/`--marker`). Then: `openclaw gateway status`, confirm the
+    marker in the live dist, record the deploy here and in spec.md, update the
+    OC-5 note in `~/projects/minimatt/docs/openclaw-config.md` § session
+    lifetime (it still says "open"), close the `OC-5` card, post the wrap-up
+    in `#openclaw` and relay it to the main session.
+  - Live proof still to come after the restart: a session that carries the
+    pin survives its next message past 04:00. One row carries it today
+    (`agent:main:discord:channel:1573314314859970580`).
+  - Known unrelated failure: `entry-freshness.test.ts` "resolves fresh daily
+    freshness for active lifecycle timestamps" fails on unmodified main in
+    this box's timezone (its fixed clock is exactly 04:00 Pacific); passes
+    with `TZ=UTC`.
+
 - **OC-7 decision pickers in Discord chats — DONE 2026-11-27 (deployed,
   rolled out, house rule in).** Workspaces can ask Matt a fixed-choice
   question with Discord buttons or a dropdown.
@@ -39,8 +78,8 @@ wired up / open.
     after it (the registry persists entries, `components-registry.ts`); a
     failed click-run posting the failure notice.
 
-- **OC-3 silent usage-limit failures — DEPLOYED 2026-11-21; matcher not yet
-  proven live (needs the plan limit to trip).** `1b775f58429`: one
+- **OC-3 silent usage-limit failures — DEPLOYED 2026-11-21; matcher proven
+  live 2026-11-27.** `1b775f58429`: one
   shared matcher (`SUBSCRIPTION_LIMIT_REACHED_RE`) covers the Claude CLI
   limit verb family, so the reworded "You've reached your Fable limit. …"
   classifies `rate_limit` and is shown verbatim; and generic failure copy now
@@ -58,8 +97,12 @@ wired up / open.
   pattern as the 2026-11-20 deploy), not from the new gateway. Still to
   observe: the next Fable limit should log
   `reason=rate_limit … detail=You've reached your Fable limit` instead of
-  `reason=unknown` (none since the restart as of 10:00). Full context in
-  spec.md patch list.
+  `reason=unknown` (none since the restart as of 10:00). **Observed
+  2026-11-27 21:40** in the gateway journal: `decision=candidate_failed
+requested=anthropic/claude-fable-5-2 … reason=rate_limit
+next=anthropic/claude-opus-5-5 detail=You've reached your Fable limit. …`
+  (and on every Fable attempt that evening). Full context in spec.md patch
+  list.
 
 - **OC-4 shared MCP bridge teardown — DEPLOYED + validated live 2026-11-20.**
   Took upstream's fix instead of a fork patch: cherry-pick `6e3c6c466c9` of

@@ -29,6 +29,8 @@ wired up / open.
   - A button with neither `value` nor `action` is dropped without an error:
     the 17:26 picker went out as text only. The house rule requires a
     `value` on every button.
+  - Seen live 17:37: a click on a button with a `value` arrived as that
+    text, flagged `inbound_event_kind: user_request` (the patch working).
   - Not yet seen live: a picker sent before a gateway restart still working
     after it (the registry persists entries, `components-registry.ts`); a
     failed click-run posting the failure notice.
